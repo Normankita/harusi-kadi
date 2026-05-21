@@ -27,6 +27,8 @@ const INITIAL_DATA: InvitationData = {
 
 export default function Home() {
   const [data, setData] = useState<InvitationData>(INITIAL_DATA);
+  const [excelData, setExcelData] = useState<{ name: string; phone: string }[] | null>(null);
+  const [excelFileName, setExcelFileName] = useState<string>("");
   const cardRef = useRef<HTMLDivElement | null>(null);
 
   return (
@@ -61,7 +63,14 @@ export default function Home() {
           
           {/* LEFT COLUMN: Input Form (Takes 5 cols on lg) */}
           <div className="lg:col-span-5 w-full">
-            <InvitationForm data={data} onChange={setData} />
+            <InvitationForm 
+              data={data} 
+              onChange={setData} 
+              excelData={excelData}
+              setExcelData={setExcelData}
+              excelFileName={excelFileName}
+              setExcelFileName={setExcelFileName}
+            />
           </div>
 
           {/* RIGHT COLUMN: Sticky Live Preview + Export Panel (Takes 7 cols on lg) */}
@@ -90,7 +99,12 @@ export default function Home() {
             </div>
 
             {/* Export and Sharing Integrations Component */}
-            <ActionButtons data={data} cardRef={cardRef} />
+            <ActionButtons 
+              data={data} 
+              cardRef={cardRef} 
+              excelData={excelData}
+              onUpdateData={setData}
+            />
           </div>
 
         </div>

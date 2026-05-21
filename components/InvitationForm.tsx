@@ -11,13 +11,20 @@ import {
   Plus, 
   Trash2, 
   Heart,
-  MessageCircle
+  MessageCircle,
+  FileSpreadsheet,
+  Upload
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { InvitationData, CommitteeMember } from "../types";
 
 interface InvitationFormProps {
   data: InvitationData;
   onChange: (newData: InvitationData) => void;
+  excelData: { name: string; phone: string }[] | null;
+  setExcelData: (data: { name: string; phone: string }[] | null) => void;
+  excelFileName: string;
+  setExcelFileName: (name: string) => void;
 }
 
 const PAYMENT_METHODS = [
@@ -31,13 +38,77 @@ const PAYMENT_METHODS = [
   { value: "KADI / PESA TASLIMU", label: "Pesa Taslimu / Cash" },
 ];
 
-export default function InvitationForm({ data, onChange }: InvitationFormProps) {
+export default function InvitationForm({ 
+  data, 
+  onChange,
+  excelData,
+  setExcelData,
+  excelFileName,
+  setExcelFileName
+}: InvitationFormProps) {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     onChange({
       ...data,
       [name]: value,
     });
+  };
+
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setExcelFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const fileData = evt.target?.result;
+        if (!fileData) return;
+        const workbook = XLSX.read(fileData, { type: "array" });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        const rows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
+        
+        if (rows.length === 0) {
+          alert("Faili halina data yoyote.");
+          return;
+        }
+
+        // Find headers
+        const headers = rows[0].map(h => String(h || "").trim().toLowerCase());
+        const jinaIndex = headers.findIndex(h => h === "jina" || h === "recipient name" || h === "recipient" || h === "name");
+        const simuIndex = headers.findIndex(h => h === "simu" || h === "phone" || h === "simu ya mwalikwa" || h === "phone number" || h === "recipient phone" || h === "phone");
+        
+        if (jinaIndex === -1) {
+          alert("Safu ya 'Jina' haikupatikana kwenye faili. Hakikisha kuna safu inayoitwa 'Jina'.");
+          return;
+        }
+
+        const dataRows: { name: string; phone: string }[] = [];
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.length === 0) continue;
+          const name = String(row[jinaIndex] || "").trim();
+          const phone = simuIndex !== -1 && row[simuIndex] !== undefined ? String(row[simuIndex] || "").trim() : "";
+          if (name) {
+            dataRows.push({ name, phone });
+          }
+        }
+
+        if (dataRows.length === 0) {
+          alert("Hakuna majina yaliyopatikana chini ya safu ya 'Jina'.");
+          return;
+        }
+
+        setExcelData(dataRows);
+      } catch (err) {
+        console.error(err);
+        alert("Imeshindwa kusoma faili la Excel.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
   };
 
   const handleCommitteeChange = (id: string, field: "name" | "phone", value: string) => {
@@ -119,23 +190,84 @@ export default function InvitationForm({ data, onChange }: InvitationFormProps) 
             1. Mwalikwa & Waandaaji (Waalikaji)
           </h3>
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="jinaLaMwalikwa" className="text-xs font-semibold text-stone-700 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-stone-400" />
-                Jina la Mwalikwa (Hiari - la kuandika juu ya kadi)
-              </label>
-              <input
-                id="jinaLaMwalikwa"
-                type="text"
-                name="jinaLaMwalikwa"
-                value={data.jinaLaMwalikwa}
-                onChange={handleInputChange}
-                placeholder="e.g., Mhe. Ridhiwani Kikwete au Bw. & Bibi Joseph Nyerere"
-                className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-stone-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all"
-              />
-              <p className="text-[10px] text-stone-400 italic">
-                Ukiacha wazi, kadi itabaki na nukta (..................................) kwa ajili ya kuandika kwa mkono.
-              </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Jina la Mwalikwa Input */}
+              <div className="space-y-1.5">
+                <label htmlFor="jinaLaMwalikwa" className="text-xs font-semibold text-stone-700 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-stone-400" />
+                  Jina la Mwalikwa (Kadi Moja)
+                </label>
+                <input
+                  id="jinaLaMwalikwa"
+                  type="text"
+                  name="jinaLaMwalikwa"
+                  value={data.jinaLaMwalikwa}
+                  onChange={handleInputChange}
+                  disabled={!!excelData}
+                  placeholder={excelData ? "Imezuiwa kwa sababu umechagua Excel" : "e.g., Bw. & Bibi Joseph Nyerere"}
+                  className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-stone-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all disabled:bg-stone-50 disabled:text-stone-400"
+                />
+                <p className="text-[10px] text-stone-400 italic">
+                  {excelData 
+                    ? "Ondoa Excel iliyopakiwa ili kuandika jina moja." 
+                    : "Ukiacha wazi, kadi itabaki na nukta ya kuandika kwa mkono."}
+                </p>
+              </div>
+
+              {/* Excel Batch Upload */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-stone-700 flex items-center gap-1.5">
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-stone-400" />
+                  Pakia Majina mengi (Excel / CSV)
+                </label>
+                
+                {!excelData ? (
+                  <div className="relative">
+                    <input
+                      type="file"
+                      id="excel-upload"
+                      accept=".xlsx, .xls, .csv"
+                      onChange={handleExcelUpload}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="excel-upload"
+                      className="flex items-center justify-center gap-2 w-full text-xs font-semibold px-4 py-3 rounded-lg border border-dashed border-amber-600/40 bg-amber-50/20 text-amber-900 hover:bg-amber-50 cursor-pointer transition-all text-center"
+                    >
+                      <Upload className="w-4 h-4 text-amber-700" />
+                      <span>Chagua Excel (.xlsx, .csv)</span>
+                    </label>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg border border-emerald-200 bg-emerald-50/40 text-emerald-950 text-xs">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-bold truncate" title={excelFileName}>
+                          {excelFileName}
+                        </p>
+                        <p className="text-[10px] text-emerald-700 font-medium">
+                          Waalikwa: <span className="font-bold">{excelData.length}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExcelData(null);
+                        setExcelFileName("");
+                      }}
+                      className="p-1.5 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded transition-all ml-1.5 flex-shrink-0 cursor-pointer"
+                      title="Ondoa faili"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+                <p className="text-[10px] text-stone-400 italic">
+                  Safu lazima iwe na kichwa cha habari &quot;Jina&quot; (S/N, Jina, Simu).
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

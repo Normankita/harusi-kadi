@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Image, FileDown, FileText, Send, AlertCircle } from "lucide-react";
+import { Image, FileDown, FileText, Send, AlertCircle, Heart } from "lucide-react";
 import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 import { 
@@ -21,6 +21,8 @@ import { InvitationData } from "../types";
 interface ActionButtonsProps {
   data: InvitationData;
   cardRef: React.RefObject<HTMLDivElement | null>;
+  excelData: { name: string; phone: string }[] | null;
+  onUpdateData: (newData: InvitationData) => void;
 }
 
 // Swahili date formatting helper for exports
@@ -40,10 +42,15 @@ const formatSwahiliDate = (dateStr: string) => {
   }
 };
 
-export default function ActionButtons({ data, cardRef }: ActionButtonsProps) {
+export default function ActionButtons({ data, cardRef, excelData, onUpdateData }: ActionButtonsProps) {
   const [isImageExporting, setIsImageExporting] = useState(false);
   const [isPdfExporting, setIsPdfExporting] = useState(false);
   const [isDocxExporting, setIsDocxExporting] = useState(false);
+  
+  // Batch states
+  const [isBatchExporting, setIsBatchExporting] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; name: string } | null>(null);
+
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [whatsappError, setWhatsappError] = useState("");
 
@@ -109,490 +116,612 @@ export default function ActionButtons({ data, cardRef }: ActionButtonsProps) {
     return encodeURIComponent(msg);
   };
 
-  // Export card as PNG Image
+  // Helper to export a single PNG
+  const handleExportImageSingle = async (recipientName: string) => {
+    const cardElement = cardRef.current;
+    if (!cardElement) return;
+
+    // Wait for fonts to load completely in the browser context before drawing
+    if (typeof window !== "undefined" && "fonts" in document) {
+      await document.fonts.ready;
+    }
+    
+    const canvas = await html2canvas(cardElement, {
+      scale: 2.5, // Crisp HD rendering
+      useCORS: true,
+      backgroundColor: "#FFFDF9",
+      logging: false,
+      allowTaint: true,
+    });
+
+    const imageUri = canvas.toDataURL("image/png");
+    const downloadLink = document.createElement("a");
+    const cleanFileName = recipientName.trim().replace(/\s+/g, "_");
+    downloadLink.href = imageUri;
+    downloadLink.download = `Mwaliko_Harusi_${cleanFileName}.png`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+  };
+
+  // Export card as PNG Image (Single or Batch)
   const handleExportImage = async () => {
-    const cardElement = cardRef.current;
-    if (!cardElement) return;
-
-    try {
-      setIsImageExporting(true);
-      
-      // Wait for fonts to load completely in the browser context before drawing
-      if (typeof window !== "undefined" && "fonts" in document) {
-        await document.fonts.ready;
+    if (excelData && excelData.length > 0 && !data.jinaLaMwalikwa.trim()) {
+      // BATCH MODE
+      try {
+        setIsBatchExporting(true);
+        for (let i = 0; i < excelData.length; i++) {
+          const row = excelData[i];
+          setBatchProgress({ current: i + 1, total: excelData.length, name: row.name });
+          
+          // Override name in layout
+          onUpdateData({ ...data, jinaLaMwalikwa: row.name });
+          
+          // Wait for DOM to update and browser to render
+          await new Promise(resolve => setTimeout(resolve, 350));
+          
+          await handleExportImageSingle(row.name);
+        }
+      } catch (error) {
+        console.error("Batch image generation failed:", error);
+      } finally {
+        // Reset override
+        onUpdateData({ ...data, jinaLaMwalikwa: "" });
+        setIsBatchExporting(false);
+        setBatchProgress(null);
       }
-      
-      const canvas = await html2canvas(cardElement, {
-        scale: 2.5, // Crisp HD rendering
-        useCORS: true,
-        backgroundColor: "#FFFDF9",
-        logging: false,
-        allowTaint: true,
-      });
-
-      const imageUri = canvas.toDataURL("image/png");
-      const downloadLink = document.createElement("a");
-      const cleanFileName = (data.jinaLaKijana || "Mwaliko").trim().replace(/\s+/g, "_");
-      downloadLink.href = imageUri;
-      downloadLink.download = `Mwaliko_Harusi_${cleanFileName}.png`;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-    } catch (error) {
-      console.error("Image generation failed:", error);
-    } finally {
-      setIsImageExporting(false);
+    } else {
+      // SINGLE MODE
+      try {
+        setIsImageExporting(true);
+        await handleExportImageSingle(data.jinaLaMwalikwa || "Mwaliko");
+      } catch (error) {
+        console.error("Image generation failed:", error);
+      } finally {
+        setIsImageExporting(false);
+      }
     }
   };
 
-  // Export card as PDF Document
+  // Helper to export a single PDF
+  const handleExportPdfSingle = async (recipientName: string) => {
+    const cardElement = cardRef.current;
+    if (!cardElement) return;
+
+    if (typeof window !== "undefined" && "fonts" in document) {
+      await document.fonts.ready;
+    }
+
+    const canvas = await html2canvas(cardElement, {
+      scale: 2.5, // Crisp rendering
+      useCORS: true,
+      backgroundColor: "#FFFDF9",
+      logging: false,
+      allowTaint: true,
+    });
+
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+    
+    const ratio = canvas.width / canvas.height;
+    const margin = 15; // 15mm border spacing
+    const contentWidth = pdfWidth - 2 * margin;
+    const contentHeight = contentWidth / ratio;
+
+    let finalWidth = contentWidth;
+    let finalHeight = contentHeight;
+
+    // Fit to A4 height constraint if necessary
+    if (contentHeight > pdfHeight - 2 * margin) {
+      finalHeight = pdfHeight - 2 * margin;
+      finalWidth = finalHeight * ratio;
+    }
+
+    const x = (pdfWidth - finalWidth) / 2;
+    const y = (pdfHeight - finalHeight) / 2;
+
+    pdf.addImage(imgData, "PNG", x, y, finalWidth, finalHeight);
+    
+    const cleanFileName = recipientName.trim().replace(/\s+/g, "_");
+    pdf.save(`Mwaliko_Harusi_${cleanFileName}.pdf`);
+  };
+
+  // Export card as PDF Document (Single or Batch)
   const handleExportPdf = async () => {
-    const cardElement = cardRef.current;
-    if (!cardElement) return;
-
-    try {
-      setIsPdfExporting(true);
-
-      // Wait for fonts to load completely in the browser context before drawing
-      if (typeof window !== "undefined" && "fonts" in document) {
-        await document.fonts.ready;
+    if (excelData && excelData.length > 0 && !data.jinaLaMwalikwa.trim()) {
+      // BATCH MODE
+      try {
+        setIsBatchExporting(true);
+        for (let i = 0; i < excelData.length; i++) {
+          const row = excelData[i];
+          setBatchProgress({ current: i + 1, total: excelData.length, name: row.name });
+          
+          // Override name
+          onUpdateData({ ...data, jinaLaMwalikwa: row.name });
+          
+          // Wait for DOM to update and render
+          await new Promise(resolve => setTimeout(resolve, 350));
+          
+          await handleExportPdfSingle(row.name);
+        }
+      } catch (error) {
+        console.error("Batch PDF generation failed:", error);
+      } finally {
+        onUpdateData({ ...data, jinaLaMwalikwa: "" });
+        setIsBatchExporting(false);
+        setBatchProgress(null);
       }
-
-      const canvas = await html2canvas(cardElement, {
-        scale: 2.5, // Crisp rendering
-        useCORS: true,
-        backgroundColor: "#FFFDF9",
-        logging: false,
-        allowTaint: true,
-      });
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      
-      const ratio = canvas.width / canvas.height;
-      const margin = 15; // 15mm border spacing
-      const contentWidth = pdfWidth - 2 * margin;
-      const contentHeight = contentWidth / ratio;
-
-      let finalWidth = contentWidth;
-      let finalHeight = contentHeight;
-
-      // Fit to A4 height constraint if necessary
-      if (contentHeight > pdfHeight - 2 * margin) {
-        finalHeight = pdfHeight - 2 * margin;
-        finalWidth = finalHeight * ratio;
+    } else {
+      // SINGLE MODE
+      try {
+        setIsPdfExporting(true);
+        await handleExportPdfSingle(data.jinaLaMwalikwa || "Mwaliko");
+      } catch (error) {
+        console.error("PDF generation failed:", error);
+      } finally {
+        setIsPdfExporting(false);
       }
-
-      const x = (pdfWidth - finalWidth) / 2;
-      const y = (pdfHeight - finalHeight) / 2;
-
-      pdf.addImage(imgData, "PNG", x, y, finalWidth, finalHeight);
-      
-      const cleanFileName = (data.jinaLaKijana || "Mwaliko").trim().replace(/\s+/g, "_");
-      pdf.save(`Mwaliko_Harusi_${cleanFileName}.pdf`);
-    } catch (error) {
-      console.error("PDF generation failed:", error);
-    } finally {
-      setIsPdfExporting(false);
     }
   };
 
-  // Export card as Microsoft Word Document (.docx)
-  const handleExportDocx = async () => {
-    try {
-      setIsDocxExporting(true);
+  // Helper to generate the docx document model with custom styling matching presets
+  const createDocxDocument = (guestName: string) => {
+    const style = data.mtindoWaMapambo || "classic";
+    
+    // Default Gold Style
+    let borderColor = "B58622";
+    let borderStyle: any = BorderStyle.DOUBLE;
+    let borderSize = 24;
+    let themeColorPrimary = "765117"; 
+    let themeColorAccent = "B58622";
+    let topOrnament = "❦  ❤  ❦";
+    let subTitleColor = "936719";
+    
+    if (style === "floral") {
+      borderColor = "768A79"; // Sage Green
+      borderStyle = BorderStyle.SINGLE;
+      borderSize = 12;
+      themeColorPrimary = "3C5A44"; // Botanical Dark Green
+      themeColorAccent = "5F7D65"; // Sage Accent Green
+      topOrnament = "🍃  🌸  🍃";
+      subTitleColor = "5F7D65";
+    } else if (style === "royal") {
+      borderColor = "936719"; // Royal Gold
+      borderStyle = BorderStyle.DOUBLE;
+      borderSize = 36; // Thick borders
+      themeColorPrimary = "624316"; 
+      themeColorAccent = "936719";
+      topOrnament = "⚜  ❤  ⚜"; // Royal Fleur-de-lis
+      subTitleColor = "765117";
+    }
 
-      const wafadhiliText = data.wafadhili.trim() || "Familia ya Bw. & Bibi John Nchwali";
-      const mahaliWafadhiliText = data.mahaliPaWafadhili.trim() ? `ya ${data.mahaliPaWafadhili}` : "ya Dodoma, Tanzania";
-      const jinaKijanaText = data.jinaLaKijana.trim() || "Maharusi Wapendwa";
-      const tareheNdoaText = data.tareheYaNdoa.trim() ? formatSwahiliDate(data.tareheYaNdoa) : "[Siku ya Sherehe]";
-      const mahaliNdoaText = data.mahaliPaNdoa.trim() || "[Ukumbi na Mahali pa Ibada]";
-      const mwishoMchangoText = data.mwishoWaKutoaMchango.trim() ? formatSwahiliDate(data.mwishoWaKutoaMchango) : "[Siku ya Mwisho]";
-      const hasPaymentDetails = data.ainaYaMchango.trim() || data.nambaYaSimuMchango.trim() || data.jinaLaAkauntiYaMchango.trim();
+    const wafadhiliText = data.wafadhili.trim() || "Familia ya Bw. & Bibi John Nchwali";
+    const mahaliWafadhiliText = data.mahaliPaWafadhili.trim() ? `ya ${data.mahaliPaWafadhili}` : "ya Dodoma, Tanzania";
+    const jinaKijanaText = data.jinaLaKijana.trim() || "Maharusi Wapendwa";
+    const tareheNdoaText = data.tareheYaNdoa.trim() ? formatSwahiliDate(data.tareheYaNdoa) : "[Siku ya Sherehe]";
+    const mahaliNdoaText = data.mahaliPaNdoa.trim() || "[Ukumbi na Mahali pa Ibada]";
+    const mwishoMchangoText = data.mwishoWaKutoaMchango.trim() ? formatSwahiliDate(data.mwishoWaKutoaMchango) : "[Siku ya Mwisho]";
+    const hasPaymentDetails = data.ainaYaMchango.trim() || data.nambaYaSimuMchango.trim() || data.jinaLaAkauntiYaMchango.trim();
 
-      // Assemble OpenXML DOCX Document
-      const doc = new Document({
-        background: {
-          color: "FFFDF9", // Matching Ivory card background color
-        },
-        sections: [
-          {
-            properties: {
-              page: {
-                size: {
-                  width: 11906, // A4 size width in dxa (8.27 in)
-                  height: 16838, // A4 size height in dxa (11.69 in)
-                },
-                margin: {
-                  top: 1440,
-                  bottom: 1440,
-                  left: 1440,
-                  right: 1440,
-                },
-                borders: {
-                  pageBorderTop: { style: BorderStyle.DOUBLE, size: 24, color: "B58622", space: 15 },
-                  pageBorderBottom: { style: BorderStyle.DOUBLE, size: 24, color: "B58622", space: 15 },
-                  pageBorderLeft: { style: BorderStyle.DOUBLE, size: 24, color: "B58622", space: 15 },
-                  pageBorderRight: { style: BorderStyle.DOUBLE, size: 24, color: "B58622", space: 15 },
-                },
+    return new Document({
+      background: {
+        color: "FFFDF9", // Matching Ivory card background color
+      },
+      sections: [
+        {
+          properties: {
+            page: {
+              size: {
+                width: 11906, // A4 size width in dxa (8.27 in)
+                height: 16838, // A4 size height in dxa (11.69 in)
+              },
+              margin: {
+                top: 1440,
+                bottom: 1440,
+                left: 1440,
+                right: 1440,
+              },
+              borders: {
+                pageBorderTop: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
+                pageBorderBottom: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
+                pageBorderLeft: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
+                pageBorderRight: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
               },
             },
-            children: [
-              // Decorative header ornament
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { before: 200, after: 100 },
-                children: [
-                  new TextRun({
-                    text: "❦  ❤  ❦",
-                    font: "Georgia",
-                    size: 32, // 16pt
-                    color: "B58622",
-                  }),
-                ],
-              }),
-              
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 300 },
-                children: [
-                  new TextRun({
-                    text: "UMOJA NA UPENDO",
-                    font: "Montserrat",
-                    size: 18, // 9pt
-                    bold: true,
-                    color: "936719",
-                  }),
-                ],
-              }),
+          },
+          children: [
+            // Decorative header ornament
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 200, after: 100 },
+              children: [
+                new TextRun({
+                  text: topOrnament,
+                  font: "Georgia",
+                  size: 32, // 16pt
+                  color: themeColorAccent,
+                }),
+              ],
+            }),
+            
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 300 },
+              children: [
+                new TextRun({
+                  text: "UMOJA NA UPENDO",
+                  font: "Montserrat",
+                  size: 18, // 9pt
+                  bold: true,
+                  color: subTitleColor,
+                }),
+              ],
+            }),
 
-              // Title
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 200 },
-                children: [
-                  new TextRun({
-                    text: "MWALIKO WA HARUSI",
-                    font: "Playfair Display",
-                    size: 40, // 20pt
-                    bold: true,
-                    color: "765117",
-                  }),
-                ],
-              }),
+            // Title
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 200 },
+              children: [
+                new TextRun({
+                  text: "MWALIKO WA HARUSI",
+                  font: "Playfair Display",
+                  size: 40, // 20pt
+                  bold: true,
+                  color: themeColorPrimary,
+                }),
+              ],
+            }),
 
-              // Horizontal spacer
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 400 },
-                children: [
-                  new TextRun({
-                    text: "════════════════════",
-                    font: "Georgia",
-                    size: 20,
-                    color: "E6BD58",
-                  }),
-                ],
-              }),
+            // Horizontal spacer
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 400 },
+              children: [
+                new TextRun({
+                  text: style === "royal" ? "⚜ ════════════════════ ⚜" : "════════════════════",
+                  font: "Georgia",
+                  size: 20,
+                  color: themeColorAccent,
+                }),
+              ],
+            }),
 
-              // Invitee salutation
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 150 },
-                children: [
-                  new TextRun({
-                    text: "NDUGU, JAMAA NA RAFIKI",
-                    font: "Montserrat",
-                    size: 20,
-                    bold: true,
-                    color: "666666",
-                  }),
-                ],
-              }),
+            // Invitee salutation
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 150 },
+              children: [
+                new TextRun({
+                  text: "NDUGU, JAMAA NA RAFIKI",
+                  font: "Montserrat",
+                  size: 20,
+                  bold: true,
+                  color: "666666",
+                }),
+              ],
+            }),
 
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 100 },
-                children: [
-                  new TextRun({
-                    text: "Inayo heshima kubwa,",
-                    font: "Georgia",
-                    size: 22,
-                    italics: true,
-                    color: "444444",
-                  }),
-                ],
-              }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 100 },
+              children: [
+                new TextRun({
+                  text: "Inayo heshima kubwa,",
+                  font: "Georgia",
+                  size: 22,
+                  italics: true,
+                  color: "444444",
+                }),
+              ],
+            }),
 
-              // Host / Wafadhili
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 100 },
-                children: [
-                  new TextRun({
-                    text: wafadhiliText,
-                    font: "Playfair Display",
-                    size: 32,
-                    bold: true,
-                    color: "38240A",
-                  }),
-                ],
-              }),
+            // Host / Wafadhili
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 100 },
+              children: [
+                new TextRun({
+                  text: wafadhiliText,
+                  font: "Playfair Display",
+                  size: 32,
+                  bold: true,
+                  color: "38240A",
+                }),
+              ],
+            }),
 
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 300 },
-                children: [
-                  new TextRun({
-                    text: mahaliWafadhiliText,
-                    font: "Georgia",
-                    size: 20,
-                    italics: true,
-                    color: "666666",
-                  }),
-                ],
-              }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 300 },
+              children: [
+                new TextRun({
+                  text: mahaliWafadhiliText,
+                  font: "Georgia",
+                  size: 20,
+                  italics: true,
+                  color: "666666",
+                }),
+              ],
+            }),
 
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 300 },
-                children: [
-                  new TextRun({
-                    text: "inayo heshima kubwa kukualika wewe mpendwa wetu:",
-                    font: "Georgia",
-                    size: 22,
-                    color: "444444",
-                  }),
-                ],
-              }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 300 },
+              children: [
+                new TextRun({
+                  text: "inayo heshima kubwa kukualika wewe mpendwa wetu:",
+                  font: "Georgia",
+                  size: 22,
+                  color: "444444",
+                }),
+              ],
+            }),
 
-              // Dynamic Guest Name input
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 300 },
-                children: [
-                  new TextRun({
-                    text: "Mhe./Prof./Dkt./Bw&Bibi/  ",
-                    font: "Playfair Display",
-                    size: 24,
-                    italics: true,
-                    color: "765117",
-                  }),
-                  new TextRun({
-                    text: data.jinaLaMwalikwa.trim() || "__________________________________",
-                    font: "Montserrat",
-                    size: 24,
-                    bold: true,
-                    underline: {},
-                    color: "1C1917",
-                  }),
-                ],
-              }),
+            // Dynamic Guest Name input
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 300 },
+              children: [
+                new TextRun({
+                  text: "Mhe./Prof./Dkt./Bw&Bibi/  ",
+                  font: "Playfair Display",
+                  size: 24,
+                  italics: true,
+                  color: themeColorPrimary,
+                }),
+                new TextRun({
+                  text: guestName.trim() || "__________________________________",
+                  font: "Montserrat",
+                  size: 24,
+                  bold: true,
+                  underline: {},
+                  color: "1C1917",
+                }),
+              ],
+            }),
 
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 200 },
-                children: [
-                  new TextRun({
-                    text: "Kwenye sherehe ya ndoa ya watoto wao wapendwa:",
-                    font: "Georgia",
-                    size: 22,
-                    color: "444444",
-                  }),
-                ],
-              }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 200 },
+              children: [
+                new TextRun({
+                  text: "Kwenye sherehe ya ndoa ya watoto wao wapendwa:",
+                  font: "Georgia",
+                  size: 22,
+                  color: "444444",
+                }),
+              ],
+            }),
 
-              // Couple names
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 400 },
-                children: [
-                  new TextRun({
-                    text: jinaKijanaText,
-                    font: "Georgia", // Script font fallback
-                    size: 56,
-                    bold: true,
-                    color: "B58622",
-                  }),
-                ],
-              }),
+            // Couple names (Uses calligraphic script fallback font)
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 400 },
+              children: [
+                new TextRun({
+                  text: jinaKijanaText,
+                  font: "Lucida Calligraphy",
+                  size: 56,
+                  bold: true,
+                  color: themeColorAccent,
+                }),
+              ],
+            }),
 
-              // Date
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 150 },
-                children: [
-                  new TextRun({
-                    text: `📅  TAREHE: ${tareheNdoaText}`,
-                    font: "Montserrat",
-                    size: 22,
-                    bold: true,
-                    color: "38240A",
-                  }),
-                ],
-              }),
+            // Date
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 150 },
+              children: [
+                new TextRun({
+                  text: `📅  TAREHE: ${tareheNdoaText}`,
+                  font: "Montserrat",
+                  size: 22,
+                  bold: true,
+                  color: "38240A",
+                }),
+              ],
+            }),
 
-              // Venue
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 500 },
-                children: [
-                  new TextRun({
-                    text: `📍  MAHALI: ${mahaliNdoaText}`,
-                    font: "Montserrat",
-                    size: 20,
-                    bold: true,
-                    color: "38240A",
-                  }),
-                ],
-              }),
+            // Venue
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 500 },
+              children: [
+                new TextRun({
+                  text: `📍  MAHALI: ${mahaliNdoaText}`,
+                  font: "Montserrat",
+                  size: 20,
+                  bold: true,
+                  color: "38240A",
+                }),
+              ],
+            }),
 
-              // Payment Box Table
-              ...(hasPaymentDetails ? [
-                new Table({
-                  alignment: AlignmentType.CENTER,
-                  width: {
-                    size: 80,
-                    type: WidthType.PERCENTAGE,
-                  },
-                  rows: [
-                    new TableRow({
-                      children: [
-                        new TableCell({
-                          shading: { fill: "FEFCF3" },
-                          borders: {
-                            top: { style: BorderStyle.SINGLE, size: 8, color: "E6BD58" },
-                            bottom: { style: BorderStyle.SINGLE, size: 8, color: "E6BD58" },
-                            left: { style: BorderStyle.SINGLE, size: 8, color: "E6BD58" },
-                            right: { style: BorderStyle.SINGLE, size: 8, color: "E6BD58" },
-                          },
-                          margins: { top: 200, bottom: 200, left: 200, right: 200 },
-                          children: [
-                            new Paragraph({
-                              alignment: AlignmentType.CENTER,
-                              spacing: { after: 100 },
-                              children: [
+            // Payment Box Table
+            ...(hasPaymentDetails ? [
+              new Table({
+                alignment: AlignmentType.CENTER,
+                width: {
+                  size: 80,
+                  type: WidthType.PERCENTAGE,
+                },
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        shading: { fill: "FEFCF3" },
+                        borders: {
+                          top: { style: BorderStyle.SINGLE, size: 8, color: borderColor },
+                          bottom: { style: BorderStyle.SINGLE, size: 8, color: borderColor },
+                          left: { style: BorderStyle.SINGLE, size: 8, color: borderColor },
+                          right: { style: BorderStyle.SINGLE, size: 8, color: borderColor },
+                        },
+                        margins: { top: 200, bottom: 200, left: 200, right: 200 },
+                        children: [
+                          new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            spacing: { after: 100 },
+                            children: [
+                              new TextRun({
+                                text: "💰 MAELEZO YA MCHANGO",
+                                font: "Montserrat",
+                                bold: true,
+                                size: 18,
+                                color: themeColorPrimary,
+                              }),
+                            ],
+                          }),
+                          new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            children: [
+                              new TextRun({
+                                text: `Michango itumwe kupitia: ${data.ainaYaMchango || "[Njia ya Malipo]"} kwenda Jina: ${data.jinaLaAkauntiYaMchango || "[Jina la Akaunti]"}`,
+                                font: "Georgia",
+                                size: 18,
+                                color: "333333",
+                              }),
+                              ...(data.nambaYaSimuMchango ? [
                                 new TextRun({
-                                  text: "💰 MAELEZO YA MCHANGO",
-                                  font: "Montserrat",
+                                  text: `, Namba: ${data.nambaYaSimuMchango}`,
+                                  font: "Georgia",
                                   bold: true,
                                   size: 18,
-                                  color: "765117",
-                                }),
-                              ],
-                            }),
+                                  color: "111111",
+                                })
+                              ] : []),
+                            ],
+                          }),
+                          ...(data.mwishoWaKutoaMchango ? [
                             new Paragraph({
                               alignment: AlignmentType.CENTER,
+                              spacing: { before: 100 },
                               children: [
                                 new TextRun({
-                                  text: `Michango itumwe kupitia: ${data.ainaYaMchango || "[Njia ya Malipo]"} kwenda Jina: ${data.jinaLaAkauntiYaMchango || "[Jina la Akaunti]"}`,
+                                  text: `Mwisho wa kupokea michango: ${mwishoMchangoText}`,
                                   font: "Georgia",
-                                  size: 18,
-                                  color: "333333",
+                                  size: 16,
+                                  italics: true,
+                                  color: themeColorPrimary,
                                 }),
-                                ...(data.nambaYaSimuMchango ? [
-                                  new TextRun({
-                                    text: `, Namba: ${data.nambaYaSimuMchango}`,
-                                    font: "Georgia",
-                                    bold: true,
-                                    size: 18,
-                                    color: "111111",
-                                  })
-                                ] : []),
                               ],
-                            }),
-                            ...(data.mwishoWaKutoaMchango ? [
-                              new Paragraph({
-                                alignment: AlignmentType.CENTER,
-                                spacing: { before: 100 },
-                                children: [
-                                  new TextRun({
-                                    text: `Mwisho wa kupokea michango: ${mwishoMchangoText}`,
-                                    font: "Georgia",
-                                    size: 16,
-                                    italics: true,
-                                    color: "765117",
-                                  }),
-                                ],
-                              })
-                            ] : []),
-                          ],
-                        }),
-                      ],
-                    }),
-                  ],
-                })
-              ] : []),
-
-              // Committee contacts list
-              ...(data.kamatiKuu.length > 0 ? [
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 400, after: 100 },
-                  children: [
-                    new TextRun({
-                      text: "📞 KAMATI YA MAWASILIANO",
-                      font: "Montserrat",
-                      size: 16,
-                      bold: true,
-                      color: "666666",
-                    }),
-                  ],
-                }),
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { after: 400 },
-                  children: [
-                    new TextRun({
-                      text: data.kamatiKuu
-                        .map((m) => `${m.name || "Mjumbe"}: ${m.phone || "---"}`)
-                        .join("  |  "),
-                      font: "Georgia",
-                      size: 18,
-                      color: "444444",
-                    }),
-                  ],
-                }),
-              ] : []),
-
-              // Welcome message
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { before: 300 },
-                children: [
-                  new TextRun({
-                    text: "*** KARIBUNI SANA SHANGAZI NA MJOMBA ***",
-                    font: "Georgia",
-                    bold: true,
-                    size: 16,
-                    color: "765117",
+                            })
+                          ] : []),
+                        ],
+                      }),
+                    ],
                   }),
                 ],
               })
-            ],
-          },
-        ],
-      });
+            ] : []),
 
-      const blob = await Packer.toBlob(doc);
-      const downloadLink = document.createElement("a");
-      const cleanFileName = (data.jinaLaKijana || "Mwaliko").trim().replace(/\s+/g, "_");
-      downloadLink.href = URL.createObjectURL(blob);
-      downloadLink.download = `Mwaliko_Harusi_${cleanFileName}.docx`;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-    } catch (error) {
-      console.error("DOCX generation failed:", error);
-    } finally {
-      setIsDocxExporting(false);
+            // Committee contacts list
+            ...(data.kamatiKuu.length > 0 ? [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 400, after: 100 },
+                children: [
+                  new TextRun({
+                    text: "📞 KAMATI YA MAWASILIANO",
+                    font: "Montserrat",
+                    size: 16,
+                    bold: true,
+                    color: "666666",
+                  }),
+                ],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 400 },
+                children: [
+                  new TextRun({
+                    text: data.kamatiKuu
+                      .map((m) => `${m.name || "Mjumbe"}: ${m.phone || "---"}`)
+                      .join("  |  "),
+                    font: "Georgia",
+                    size: 18,
+                    color: "444444",
+                  }),
+                ],
+              }),
+            ] : []),
+
+            // Welcome message
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 300 },
+              children: [
+                new TextRun({
+                  text: style === "royal" ? "*** KARIBUNI SANA MZEE NA MAMA KWA SHEREHE ***" : "*** KARIBUNI SANA SHANGAZI NA MJOMBA ***",
+                  font: "Georgia",
+                  bold: true,
+                  size: 16,
+                  color: themeColorPrimary,
+                }),
+              ],
+            })
+          ],
+        },
+      ],
+    });
+  };
+
+  // Helper to export a single Word document
+  const handleExportDocxSingle = async (recipientName: string) => {
+    const doc = createDocxDocument(recipientName);
+    const blob = await Packer.toBlob(doc);
+    const downloadLink = document.createElement("a");
+    const cleanFileName = recipientName.trim().replace(/\s+/g, "_");
+    downloadLink.href = URL.createObjectURL(blob);
+    downloadLink.download = `Mwaliko_Harusi_${cleanFileName}.docx`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+  };
+
+  // Export card as Microsoft Word Document (Single or Batch)
+  const handleExportDocx = async () => {
+    if (excelData && excelData.length > 0 && !data.jinaLaMwalikwa.trim()) {
+      // BATCH MODE
+      try {
+        setIsBatchExporting(true);
+        for (let i = 0; i < excelData.length; i++) {
+          const row = excelData[i];
+          setBatchProgress({ current: i + 1, total: excelData.length, name: row.name });
+          
+          // Override name
+          onUpdateData({ ...data, jinaLaMwalikwa: row.name });
+          
+          // Wait for DOM to render
+          await new Promise(resolve => setTimeout(resolve, 350));
+          
+          await handleExportDocxSingle(row.name);
+        }
+      } catch (error) {
+        console.error("Batch DOCX generation failed:", error);
+      } finally {
+        onUpdateData({ ...data, jinaLaMwalikwa: "" });
+        setIsBatchExporting(false);
+        setBatchProgress(null);
+      }
+    } else {
+      // SINGLE MODE
+      try {
+        setIsDocxExporting(true);
+        await handleExportDocxSingle(data.jinaLaMwalikwa || "Mwaliko");
+      } catch (error) {
+        console.error("DOCX generation failed:", error);
+      } finally {
+        setIsDocxExporting(false);
+      }
     }
   };
 
@@ -618,6 +747,8 @@ export default function ActionButtons({ data, cardRef }: ActionButtonsProps) {
     window.open(url, "_blank");
   };
 
+  const isBatchMode = excelData && excelData.length > 0 && !data.jinaLaMwalikwa.trim();
+
   return (
     <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-6">
       <div>
@@ -625,7 +756,9 @@ export default function ActionButtons({ data, cardRef }: ActionButtonsProps) {
           Utoaji na Ushiriki (Actions)
         </h3>
         <p className="text-stone-500 text-xs mt-0.5">
-          Pakua kadi yako au ushiriki moja kwa moja na waalikwa.
+          {isBatchMode 
+            ? `Utapakua faili ${excelData.length} kwa pamoja (Batch Mode).` 
+            : "Pakua kadi yako au ushiriki moja kwa moja na waalikwa."}
         </p>
       </div>
 
@@ -633,29 +766,47 @@ export default function ActionButtons({ data, cardRef }: ActionButtonsProps) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <button
           onClick={handleExportImage}
-          disabled={isImageExporting}
+          disabled={isImageExporting || isBatchExporting}
           className="flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl border border-amber-600 bg-white hover:bg-amber-50 text-amber-800 font-semibold text-xs transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 cursor-pointer text-center"
         >
           <Image className={`w-3.5 h-3.5 flex-shrink-0 ${isImageExporting ? "animate-spin" : ""}`} />
-          <span>{isImageExporting ? "Inapakua..." : "Picha (PNG)"}</span>
+          <span>
+            {isImageExporting 
+              ? "Inapakua..." 
+              : isBatchMode 
+                ? `Picha Zote (${excelData.length})` 
+                : "Picha (PNG)"}
+          </span>
         </button>
 
         <button
           onClick={handleExportPdf}
-          disabled={isPdfExporting}
+          disabled={isPdfExporting || isBatchExporting}
           className="flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-semibold text-xs transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 cursor-pointer text-center"
         >
           <FileDown className={`w-3.5 h-3.5 flex-shrink-0 ${isPdfExporting ? "animate-spin" : ""}`} />
-          <span>{isPdfExporting ? "Inapakua..." : "Nyaraka (PDF)"}</span>
+          <span>
+            {isPdfExporting 
+              ? "Inapakua..." 
+              : isBatchMode 
+                ? `PDF Zote (${excelData.length})` 
+                : "Nyaraka (PDF)"}
+          </span>
         </button>
 
         <button
           onClick={handleExportDocx}
-          disabled={isDocxExporting}
+          disabled={isDocxExporting || isBatchExporting}
           className="flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold text-xs transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 cursor-pointer text-center"
         >
           <FileText className={`w-3.5 h-3.5 flex-shrink-0 ${isDocxExporting ? "animate-spin" : ""}`} />
-          <span>{isDocxExporting ? "Inapakua..." : "Word (.docx)"}</span>
+          <span>
+            {isDocxExporting 
+              ? "Inapakua..." 
+              : isBatchMode 
+                ? `Word Zote (${excelData.length})` 
+                : "Word (.docx)"}
+          </span>
         </button>
       </div>
 
@@ -702,6 +853,46 @@ export default function ActionButtons({ data, cardRef }: ActionButtonsProps) {
           </p>
         </form>
       </div>
+
+      {/* Batch Export Progress Overlay */}
+      {isBatchExporting && batchProgress && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl border border-amber-100 flex flex-col items-center text-center space-y-4 m-4">
+            <div className="relative flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full border-4 border-amber-100 border-t-amber-600 animate-spin" />
+              <Heart className="w-6 h-6 text-amber-600 fill-amber-500/10 absolute animate-pulse" />
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-serif font-bold text-stone-800">
+                Inaandaa Kadi za Harusi
+              </h3>
+              <p className="text-stone-500 text-xs mt-1">
+                Tafadhali usifunge kivinjari chako wakati wa kupakua.
+              </p>
+            </div>
+
+            <div className="w-full bg-stone-100 rounded-full h-2.5 mt-2 overflow-hidden">
+              <div 
+                className="bg-amber-600 h-2.5 rounded-full transition-all duration-300"
+                style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+              />
+            </div>
+
+            <div className="flex justify-between w-full text-xs font-semibold text-stone-600 px-1">
+              <span>Mwalikwa wa {batchProgress.current} kati ya {batchProgress.total}</span>
+              <span className="text-amber-700 font-bold">{Math.round((batchProgress.current / batchProgress.total) * 100)}%</span>
+            </div>
+
+            <div className="bg-amber-50/50 border border-amber-100 rounded-xl px-4 py-2.5 w-full">
+              <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Mwalikwa Anayesindikwa</p>
+              <p className="text-sm font-serif font-black text-amber-900 truncate mt-0.5" title={batchProgress.name}>
+                {batchProgress.name}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
