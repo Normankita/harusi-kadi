@@ -88,24 +88,44 @@ export default function InvitationForm({ data, onChange }: InvitationFormProps) 
         {/* Section 1: Wafadhili / Waandaaji */}
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-amber-800 uppercase tracking-wider">
-            1. Waandaaji / Wafadhili (Waalikaji)
+            1. Mwalikwa & Waandaaji (Waalikaji)
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div className="space-y-1.5">
-              <label htmlFor="wafadhili" className="text-xs font-semibold text-stone-700 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-stone-400" />
-                Jina la Wafadhili / Familia
+              <label htmlFor="jinaLaMwalikwa" className="text-xs font-semibold text-stone-700 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-stone-400" />
+                Jina la Mwalikwa (Hiari - la kuandika juu ya kadi)
               </label>
               <input
-                id="wafadhili"
+                id="jinaLaMwalikwa"
                 type="text"
-                name="wafadhili"
-                value={data.wafadhili}
+                name="jinaLaMwalikwa"
+                value={data.jinaLaMwalikwa}
                 onChange={handleInputChange}
-                placeholder="e.g., Familia ya Bw. & Bibi John Nchwali"
+                placeholder="e.g., Mhe. Ridhiwani Kikwete au Bw. & Bibi Joseph Nyerere"
                 className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-stone-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all"
               />
+              <p className="text-[10px] text-stone-400 italic">
+                Ukiacha wazi, kadi itabaki na nukta (..................................) kwa ajili ya kuandika kwa mkono.
+              </p>
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label htmlFor="wafadhili" className="text-xs font-semibold text-stone-700 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-stone-400" />
+                  Jina la Wafadhili / Familia
+                </label>
+                <input
+                  id="wafadhili"
+                  type="text"
+                  name="wafadhili"
+                  value={data.wafadhili}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Familia ya Bw. & Bibi John Nchwali"
+                  className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-stone-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all"
+                />
+              </div>
 
             <div className="space-y-1.5">
               <label htmlFor="mahaliPaWafadhili" className="text-xs font-semibold text-stone-700 flex items-center gap-1.5">
@@ -124,6 +144,7 @@ export default function InvitationForm({ data, onChange }: InvitationFormProps) 
             </div>
           </div>
         </div>
+      </div>
 
         {/* Section 2: Maelezo ya Ndoa */}
         <div className="space-y-4 pt-2 border-t border-stone-50">

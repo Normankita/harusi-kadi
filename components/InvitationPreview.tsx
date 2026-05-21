@@ -145,7 +145,10 @@ export default function InvitationPreview({ data, cardRef }: InvitationPreviewPr
             {/* Guest Name Line */}
             <div className="py-2.5 w-full">
               <p className="text-xs md:text-sm font-serif text-amber-800/80 font-bold border-b border-dashed border-amber-600/40 pb-1 italic max-w-xs mx-auto">
-                Mhe./Prof./Dkt./Bw&Bibi/..................................
+                Mhe./Prof./Dkt./Bw&Bibi/{" "}
+                <span className="text-stone-850 not-italic font-sans font-bold tracking-wide">
+                  {data.jinaLaMwalikwa.trim() || ".................................."}
+                </span>
               </p>
             </div>
 

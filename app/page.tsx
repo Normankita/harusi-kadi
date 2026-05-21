@@ -8,6 +8,7 @@ import InvitationPreview from "../components/InvitationPreview";
 import ActionButtons from "../components/ActionButtons";
 
 const INITIAL_DATA: InvitationData = {
+  jinaLaMwalikwa: "",
   wafadhili: "Familia ya Bw. & Bibi John Nchwali",
   mahaliPaWafadhili: "Ipagala - Dodoma",
   jinaLaKijana: "Bright Mujulizi & Mercy Joel",

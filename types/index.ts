@@ -5,6 +5,7 @@ export interface CommitteeMember {
 }
 
 export interface InvitationData {
+  jinaLaMwalikwa: string;
   wafadhili: string;
   mahaliPaWafadhili: string;
   jinaLaKijana: string;
