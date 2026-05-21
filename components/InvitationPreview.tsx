@@ -54,7 +54,7 @@ const WatermarkPattern = () => (
 
 const CenterMotif = () => (
   <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0 opacity-[0.035]">
-    <svg viewBox="0 0 200 200" className="w-[340px] h-[340px] text-amber-700" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 200 200" width="340" height="340" className="w-[340px] h-[340px] text-amber-700" fill="none" xmlns="http://www.w3.org/2000/svg">
       {/* Delicate outer circular frame */}
       <circle cx="100" cy="100" r="85" stroke="currentColor" strokeWidth="1" strokeDasharray="4 4" />
       <circle cx="100" cy="100" r="78" stroke="currentColor" strokeWidth="0.8" />
@@ -89,6 +89,8 @@ const CenterMotif = () => (
 const ClassicOrnamentLarge = ({ className }: { className?: string }) => (
   <svg 
     viewBox="0 0 100 100" 
+    width="96" 
+    height="96"
     fill="none" 
     xmlns="http://www.w3.org/2000/svg" 
     className={`absolute w-24 h-24 text-amber-600/35 select-none pointer-events-none z-0 ${className}`}
@@ -110,6 +112,8 @@ const ClassicOrnamentLarge = ({ className }: { className?: string }) => (
 const ClassicOrnamentSmall = ({ className }: { className?: string }) => (
   <svg 
     viewBox="0 0 80 80" 
+    width="56"
+    height="56"
     fill="none" 
     xmlns="http://www.w3.org/2000/svg" 
     className={`absolute w-14 h-14 text-amber-600/20 select-none pointer-events-none z-0 ${className}`}
@@ -126,6 +130,8 @@ const ClassicOrnamentSmall = ({ className }: { className?: string }) => (
 const FloralOrnamentLarge = ({ className }: { className?: string }) => (
   <svg 
     viewBox="0 0 120 120" 
+    width="110"
+    height="110"
     fill="none" 
     xmlns="http://www.w3.org/2000/svg" 
     className={`absolute w-[110px] h-[110px] text-amber-600/35 select-none pointer-events-none z-0 ${className}`}
@@ -139,7 +145,7 @@ const FloralOrnamentLarge = ({ className }: { className?: string }) => (
     
     {/* Intricate peony blossom (approx center (56, 46)) */}
     <path d="M 40 40 C 35 30, 48 20, 58 28 C 68 18, 80 30, 72 40 C 82 48, 70 65, 55 58 C 42 62, 32 50, 40 40 Z" fill="currentColor" fillOpacity="0.45" />
-    <path d="M 45 42 C 42 35, 52 28, 56 34 C 60 28, 70 35, 67 42 C 70 48, 62 55, 56 50 C 50 55, 42 48, 45 42 Z" fill="#FFFDF9" fillRule="evenodd" />
+    <path d="M 45 42 C 42 35, 52 28, 56 34 C 60 28, 70 35, 67 42 C 70 48, 62 55, 56 50 C 50 55, 42 48, 45 42 Z" fill="#FFFDF9" fill-rule="evenodd" />
     <path d="M 45 42 C 42 35, 52 28, 56 34 C 60 28, 70 35, 67 42 C 70 48, 62 55, 56 50 C 50 55, 42 48, 45 42 Z" stroke="currentColor" strokeWidth="1" />
     <circle cx="56" cy="40" r="3.5" fill="currentColor" fillOpacity="0.75" />
     
@@ -170,6 +176,8 @@ const FloralOrnamentLarge = ({ className }: { className?: string }) => (
 const FloralOrnamentSmall = ({ className }: { className?: string }) => (
   <svg 
     viewBox="0 0 80 80" 
+    width="56"
+    height="56"
     fill="none" 
     xmlns="http://www.w3.org/2000/svg" 
     className={`absolute w-14 h-14 text-amber-600/20 select-none pointer-events-none z-0 ${className}`}
@@ -192,7 +200,7 @@ const SideVineOrnament = ({ isLeft }: { isLeft: boolean }) => (
       isLeft ? "left-2.5" : "right-2.5"
     }`}
   >
-    <svg viewBox="0 0 20 360" className="w-4 h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 20 360" width="16" height="360" className="w-4 h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M 10 0 L 10 360" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
       {[30, 90, 150, 210, 270, 330].map((y) => (
         <React.Fragment key={y}>
@@ -208,6 +216,8 @@ const SideVineOrnament = ({ isLeft }: { isLeft: boolean }) => (
 const RoyalOrnamentLarge = ({ className }: { className?: string }) => (
   <svg 
     viewBox="0 0 120 120" 
+    width="112"
+    height="112"
     fill="none" 
     xmlns="http://www.w3.org/2000/svg" 
     className={`absolute w-28 h-28 text-amber-600/35 select-none pointer-events-none z-0 ${className}`}
@@ -227,6 +237,8 @@ const RoyalOrnamentLarge = ({ className }: { className?: string }) => (
 const RoyalOrnamentSmall = ({ className }: { className?: string }) => (
   <svg 
     viewBox="0 0 80 80" 
+    width="56"
+    height="56"
     fill="none" 
     xmlns="http://www.w3.org/2000/svg" 
     className={`absolute w-14 h-14 text-amber-600/20 select-none pointer-events-none z-0 ${className}`}
@@ -243,7 +255,7 @@ const HeaderDividerOrnament = ({ isTop }: { isTop: boolean }) => (
   <div className={`w-full flex justify-center text-amber-600/50 pointer-events-none select-none z-10 ${
     isTop ? "mb-1" : "mt-2"
   }`}>
-    <svg viewBox="0 0 200 20" className="w-48 h-5" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 200 20" width="192" height="20" className="w-48 h-5" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path 
         d="M 10 10 C 50 10, 70 3, 100 10 C 130 3, 150 10, 190 10" 
         stroke="currentColor" 
@@ -364,7 +376,7 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
                 {/* Premium gold gradient divider with star center */}
                 <div className="flex items-center justify-center gap-2 w-48 mx-auto mt-1.5 text-amber-600/60">
                   <span className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-amber-500/60" />
-                  <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current text-amber-600" xmlns="http://www.w3.org/2000/svg">
+                  <svg viewBox="0 0 24 24" width="14" height="14" className="w-3.5 h-3.5 fill-current text-amber-600" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                   </svg>
                   <span className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-amber-500/60" />
@@ -439,7 +451,7 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
                 {/* Premium tapered divider above contributions */}
                 <div className="flex items-center justify-center gap-2 w-full text-amber-600/30 my-3">
                   <span className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-amber-500/45" />
-                  <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current text-amber-600/50" xmlns="http://www.w3.org/2000/svg">
+                  <svg viewBox="0 0 24 24" width="12" height="12" className="w-3 h-3 fill-current text-amber-600/50" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 5l1.8 3.6 4 .6-2.9 2.8.7 4-3.6-1.9-3.6 1.9.7-4-2.9-2.8 4-.6z" />
                   </svg>
                   <span className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-amber-500/45" />
@@ -562,9 +574,9 @@ export default function InvitationPreview({ data, cardRef }: InvitationPreviewPr
         <InvitationCardContent data={data} isCapture={false} />
       </div>
 
-      {/* 2. HIDDEN OFF-SCREEN STATIC A4 CAPTURE TARGET (ALWAYS SCALE 1.0) */}
+      {/* 2. HIDDEN OFF-SCREEN STATIC A4 CAPTURE TARGET (ALWAYS SCALE 1.0 at fixed top-0 left-0 for html2canvas alignment) */}
       <div 
-        className="absolute top-0 left-[-9999px] pointer-events-none"
+        className="fixed top-0 left-0 pointer-events-none z-[-50] opacity-0"
         aria-hidden="true"
       >
         <InvitationCardContent ref={cardRef} data={data} isCapture={true} />
