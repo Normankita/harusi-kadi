@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Image, FileDown, Send, Check, AlertCircle } from "lucide-react";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 import { InvitationData } from "../types";
 
