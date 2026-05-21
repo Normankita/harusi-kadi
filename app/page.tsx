@@ -21,7 +21,8 @@ const INITIAL_DATA: InvitationData = {
   kamatiKuu: [
     { id: "1", name: "Bw. John Joel (Mwenyekiti)", phone: "0754123456" },
     { id: "2", name: "Bi. Mercy Nchwali (Mhazini)", phone: "0712345678" }
-  ]
+  ],
+  mtindoWaMapambo: "classic"
 };
 
 export default function Home() {

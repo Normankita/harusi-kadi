@@ -16,4 +16,5 @@ export interface InvitationData {
   nambaYaSimuMchango: string;
   mwishoWaKutoaMchango: string;
   kamatiKuu: CommitteeMember[];
+  mtindoWaMapambo: "classic" | "floral" | "royal";
 }

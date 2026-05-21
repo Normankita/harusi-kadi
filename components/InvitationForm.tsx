@@ -85,6 +85,34 @@ export default function InvitationForm({ data, onChange }: InvitationFormProps) 
       </div>
 
       <div className="space-y-6">
+        {/* Mtindo wa Mapambo Selector */}
+        <div className="space-y-3 pb-5 border-b border-stone-100">
+          <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">
+            Mtindo wa Mapambo (Card Design Style)
+          </label>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { value: "classic", label: "Classic Gold", desc: "Pembe za dhahabu" },
+              { value: "floral", label: "Elegant Floral", desc: "Majani ya pembeni" },
+              { value: "royal", label: "Royal Baroque", desc: "Urembo wa kifalme" }
+            ].map((style) => (
+              <button
+                key={style.value}
+                type="button"
+                onClick={() => onChange({ ...data, mtindoWaMapambo: style.value as any })}
+                className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                  data.mtindoWaMapambo === style.value
+                    ? "border-amber-600 bg-amber-50/50 text-amber-900 shadow-xs"
+                    : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+                }`}
+              >
+                <span className="text-xs font-bold">{style.label}</span>
+                <span className="text-[9px] text-stone-400 mt-1 leading-tight">{style.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Section 1: Wafadhili / Waandaaji */}
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-amber-800 uppercase tracking-wider">
