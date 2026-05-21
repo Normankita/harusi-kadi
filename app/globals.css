@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+:root {
+  --background: #FDFCF7;
+  --foreground: #1c1917;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-serif: var(--font-playfair), Georgia, serif;
+  --font-sans: var(--font-montserrat), sans-serif;
+  --font-script: var(--font-great-vibes), cursive;
+  
+  --color-gold-50: #fefcf3;
+  --color-gold-100: #fcf6e1;
+  --color-gold-200: #f7e8b9;
+  --color-gold-300: #f0d588;
+  --color-gold-400: #e6bd58;
+  --color-gold-500: #cca02f;
+  --color-gold-600: #b58622;
+  --color-gold-700: #936719;
+  --color-gold-800: #765117;
+  --color-gold-900: #624316;
+  --color-gold-950: #38240a;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+/* Premium scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #fdfcf7;
+}
+::-webkit-scrollbar-thumb {
+  background: #cca02f;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b58622;
+}
+
+/* Shimmer animation for loading states */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.5s infinite;
+}
