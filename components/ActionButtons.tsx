@@ -63,8 +63,9 @@ export default function ActionButtons({ data, cardRef }: ActionButtonsProps) {
     const kijana = data.jinaLaKijana.trim() || "Maharusi wetu";
     const tarehe = data.tareheYaNdoa.trim() ? formatSwahiliDate(data.tareheYaNdoa) : "[Siku ya Sherehe]";
     const mahali = data.mahaliPaNdoa.trim() || "[Ukumbi wa Sherehe]";
+    const mwalikwa = data.jinaLaMwalikwa.trim() || "Ndugu Mwalikwa";
     
-    let msg = `Habari Ndugu Mwalikwa, \n\n*YAH: MWALIKO WA HARUSI*\n\n`;
+    let msg = `Habari ${mwalikwa}, \n\n*YAH: MWALIKO WA HARUSI*\n\n`;
     msg += `Ndugu, jamaa na rafiki, tunayo furaha kubwa kukujulisha kuwa ${wafadhili}${mahaliWafadhili} inakualika wewe pamoja na familia yako katika sherehe ya ndoa ya kijana wao mpendwa *${kijana}*.\n\n`;
     msg += `📌 *Ibada na Sherehe itafanyika:*\n`;
     msg += `📅 *Tarehe:* ${tarehe}\n`;
