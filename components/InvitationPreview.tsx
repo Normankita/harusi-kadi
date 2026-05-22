@@ -512,11 +512,11 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
           <img src="/gold-leaves-bg.jpg" alt="background" className="absolute w-[650px] h-[900px] -rotate-90 object-cover z-0 opacity-90" />
 
           {/* Layer 3: Inner Content Card */}
-          <div className="relative z-10 w-[85%] h-full mx-auto flex flex-col justify-center items-center text-center bg-transparent py-8">
+          <div className="relative z-10 w-[85%] h-full mx-auto flex flex-col justify-center items-center text-center bg-transparent px-12 py-10 md:px-16 md:py-12">
             
             {/* Header Title */}
             <div className="mt-1">
-              <h1 className="whitespace-nowrap text-3xl font-serif font-bold not-italic mb-3 text-[#8b5a2b] text-center">
+              <h1 className="whitespace-nowrap text-3xl font-serif font-bold not-italic mb-2 text-[#8b5a2b] text-center">
                 Mchango wa Harusi
               </h1>
             </div>
@@ -536,7 +536,7 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
               </p>
 
               {/* Guest name line (commas if empty) */}
-              <div className="w-full text-center py-0.5">
+              <div className="w-full text-center my-2">
                 <div className="font-serif font-bold italic text-amber-955 text-base md:text-lg leading-relaxed text-center">
                   {data.jinaLaMwalikwa.trim() || ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,"}
                 </div>
@@ -550,29 +550,29 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
                 {jinaKijanaText}
               </h2>
 
-              <p className="font-serif italic text-gray-800 text-base md:text-lg leading-relaxed text-center max-w-[95%]">
+              <p className="font-serif italic text-gray-800 text-sm md:text-[15px] leading-relaxed text-center max-w-[95%]">
                 Anatarajia kufunga ndoa tarahe <span className="font-bold not-italic">{tareheNdoaText}</span> {mahaliNdoaText}. Hivyo ukiwa ndugu, jamaa na rafiki wa karibu wa familia hii unaombwa/mnaombwa kutoa mchango wako/wenu wa hali na mali kufanikisha shughuli hii muhimu. Tafadhali kabidhi mchango wako kwa <span className="not-italic font-sans font-bold text-gray-900 tracking-wide text-lg">{data.jinaLaAkauntiYaMchango || "Mercy Joel Nchwali"}</span>
               </p>
 
               {/* Payment Details embedded in paragraph/flow - no outer card */}
-              <p className="not-italic font-sans font-bold text-gray-900 tracking-wide text-lg leading-relaxed text-center pt-0.5">
+              <p className="not-italic font-sans font-bold text-gray-900 tracking-wide text-lg leading-relaxed text-center my-2">
                 {data.ainaYaMchango || "MPESA"} – {data.nambaYaSimuMchango || "0754388813"}
                 {data.ainaYaMchangoPili && data.nambaYaSimuMchangoPili && (
                   <span> au {data.ainaYaMchangoPili} - {data.nambaYaSimuMchangoPili}</span>
                 )}
               </p>
 
-              <p className="not-italic font-sans font-bold text-gray-900 tracking-wide text-base md:text-lg leading-relaxed text-center">
+              <p className="not-italic font-sans font-bold text-gray-900 tracking-wide text-base md:text-lg leading-relaxed text-center mb-2">
                 Mwisho wa kutoa mchango ni {mwishoMchangoText}
               </p>
 
-              <p className="font-serif italic font-bold text-gray-800 text-base md:text-lg leading-relaxed text-center pt-0.5">
+              <p className="font-serif italic font-bold text-gray-800 text-base md:text-lg leading-relaxed text-center mt-1 mb-2">
                 “Tunatanguliza shukrani zetu za dhati na Mungu awabariki sana”
               </p>
             </div>
 
             {/* Bottom-left aligned contacts inside the frame */}
-            <div className="w-full flex justify-start items-end mt-3 pl-4">
+            <div className="w-full flex justify-start items-end mt-2 pl-2 mb-2">
               {data.kamatiKuu.length > 0 && (
                 <div className="text-left space-y-1 text-sm md:text-base text-gray-900 font-sans not-italic font-semibold">
                   <p className="not-italic font-sans font-semibold text-gray-900 text-sm md:text-base uppercase tracking-wider mb-1">
@@ -581,8 +581,8 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                     {data.kamatiKuu.map((m) => (
                       <React.Fragment key={m.id}>
-                        <span className="not-italic font-sans font-semibold text-gray-900 pr-2">{m.name || "Mhusika"}</span>
-                        <span className="not-italic font-sans font-semibold text-gray-900">{m.phone || "---"}</span>
+                        <span className="not-italic font-sans font-bold text-gray-900 pr-2">{m.name || "Mhusika"}</span>
+                        <span className="not-italic font-sans font-bold text-gray-900">{m.phone || "---"}</span>
                       </React.Fragment>
                     ))}
                   </div>
@@ -774,11 +774,11 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
           <img src="/gold-leaves-bg.jpg" alt="background" className="absolute w-[650px] h-[900px] -rotate-90 object-cover z-0 opacity-90" />
 
           {/* Layer 3: Inner Content Card */}
-          <div className="relative z-10 w-[85%] h-full mx-auto flex flex-col justify-center items-center text-center bg-transparent py-8">
+          <div className="relative z-10 w-[85%] h-full mx-auto flex flex-col justify-center items-center text-center bg-transparent px-12 py-10 md:px-16 md:py-12">
             
             {/* Header Title */}
             <div className="mt-1">
-              <h1 className="whitespace-nowrap text-3xl font-serif font-bold not-italic mb-3 text-[#8b5a2b] text-center">
+              <h1 className="whitespace-nowrap text-3xl font-serif font-bold not-italic mb-2 text-[#8b5a2b] text-center">
                 MWALIKO WA HARUSI
               </h1>
             </div>
@@ -794,7 +794,7 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
               </p>
 
               {/* Guest name line */}
-              <div className="w-full text-center py-0.5">
+              <div className="w-full text-center my-2">
                 <div className="font-serif font-bold italic text-amber-955 text-base md:text-lg leading-relaxed text-center">
                   Mhe./Prof./Dkt./Bw&Bibi/ {data.jinaLaMwalikwa.trim() || ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,"}
                 </div>
@@ -815,25 +815,25 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
                 {wafadhiliText} {mahaliWafadhiliText}
               </p>
 
-              <p className="font-serif italic text-gray-800 text-base md:text-lg leading-relaxed text-center max-w-[95%]">
+              <p className="font-serif italic text-gray-800 text-sm md:text-[15px] leading-relaxed text-center max-w-[95%]">
                 Ibada na sherehe zitafanyika tarehe <span className="font-bold not-italic">{tareheNdoaText}</span> katika ukumbi wa {mahaliNdoaText}.
               </p>
 
               {/* Payment Details embedded in paragraph/flow - no outer card */}
               {hasPaymentDetails && (
-                <p className="not-italic font-sans font-bold text-gray-900 tracking-wide text-base md:text-lg leading-relaxed text-center pt-0.5">
+                <p className="not-italic font-sans font-bold text-gray-900 tracking-wide text-base md:text-lg leading-relaxed text-center my-2">
                   Michango itumwe kwa <span className="not-italic font-sans font-bold text-gray-900 tracking-wide text-lg">{data.jinaLaAkauntiYaMchango || "Mercy Joel Nchwali"}</span>: <span className="not-italic font-sans font-bold text-gray-900 tracking-wide text-lg">{data.ainaYaMchango || "MPESA"} - {data.nambaYaSimuMchango || "0754388813"}{data.ainaYaMchangoPili && data.nambaYaSimuMchangoPili && ` au ${data.ainaYaMchangoPili} - ${data.nambaYaSimuMchangoPili}`}</span>
                   {data.mwishoWaKutoaMchango && <span> mwisho tarehe {mwishoMchangoText}</span>}
                 </p>
               )}
 
-              <p className="font-serif italic font-bold text-gray-800 text-base md:text-lg leading-relaxed text-center pt-0.5">
+              <p className="font-serif italic font-bold text-gray-800 text-base md:text-lg leading-relaxed text-center mt-1 mb-2">
                 “Tunatanguliza shukrani zetu za dhati na Mungu awabariki sana”
               </p>
             </div>
 
             {/* Bottom-left aligned contacts inside the frame */}
-            <div className="w-full flex justify-start items-end mt-3 pl-4">
+            <div className="w-full flex justify-start items-end mt-2 pl-2 mb-2">
               {data.kamatiKuu.length > 0 && (
                 <div className="text-left space-y-1 text-sm md:text-base text-gray-900 font-sans not-italic font-semibold">
                   <p className="not-italic font-sans font-semibold text-gray-900 text-sm md:text-base uppercase tracking-wider mb-1">
@@ -842,8 +842,8 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                     {data.kamatiKuu.map((m) => (
                       <React.Fragment key={m.id}>
-                        <span className="not-italic font-sans font-semibold text-gray-900 pr-2">{m.name || "Mhusika"}</span>
-                        <span className="not-italic font-sans font-semibold text-gray-900">{m.phone || "---"}</span>
+                        <span className="not-italic font-sans font-bold text-gray-900 pr-2">{m.name || "Mhusika"}</span>
+                        <span className="not-italic font-sans font-bold text-gray-900">{m.phone || "---"}</span>
                       </React.Fragment>
                     ))}
                   </div>
