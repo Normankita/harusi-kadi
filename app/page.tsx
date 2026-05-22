@@ -88,7 +88,7 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-lg font-serif font-black tracking-wide text-stone-800 flex items-center gap-1.5">
-                Kadi<span className="text-amber-600">.tz</span>
+                NorZah Designs
               </h1>
               <p className="text-[10px] text-stone-400 font-semibold tracking-wider uppercase -mt-0.5">
                 Mtengenezaji wa Kadi za Harusi
@@ -189,7 +189,18 @@ export default function Home() {
           <p className="flex items-center justify-center gap-1">
             Imetengenezwa kwa <Heart className="w-3.5 h-3.5 text-amber-500 fill-amber-500" /> kwa ajili ya Maharusi wa Kitanzania.
           </p>
-          <p>Hakimiliki &copy; {new Date().getFullYear()} Kadi.tz. Haki zote zimehifadhiwa.</p>
+          <p>
+            Imesanifiwa na kuundwa na {" "}
+            <a 
+              href="https://norman-kita.vercel.app/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-amber-600 hover:text-amber-700 underline font-semibold transition-all"
+            >
+              Norman Kita (NorZah)
+            </a>.
+          </p>
+          <p>Hakimiliki &copy; {new Date().getFullYear()} NorZah. Haki zote zimehifadhiwa.</p>
         </div>
       </footer>
     </div>

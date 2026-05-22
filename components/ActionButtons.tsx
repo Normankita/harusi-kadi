@@ -136,32 +136,51 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
       return encodeURIComponent(msg);
     }
 
-    const wafadhili = data.wafadhili.trim() || "Kamati ya Waandaaji";
+    const wafadhili = data.wafadhili.trim() || "Familia ya Bw. & Bibi John Nchwali";
     const mahaliWafadhili = data.mahaliPaWafadhili.trim() ? ` ya ${data.mahaliPaWafadhili}` : "";
-    const kijana = data.jinaLaKijana.trim() || "Maharusi wetu";
+    const kijana = data.jinaLaKijana.trim() || "Bright Mujulizi Kimaro";
     const tarehe = data.tareheYaNdoa.trim() ? formatSwahiliDate(data.tareheYaNdoa) : "[Siku ya Sherehe]";
-    const mahali = data.mahaliPaNdoa.trim() || "[Ukumbi wa Sherehe]";
+    const mahali = data.mahaliPaNdoa.trim() || "[Ukumbi na Mahali pa Ibada]";
     const mwalikwa = data.jinaLaMwalikwa.trim() || "Ndugu Mwalikwa";
+    const jinaAkaunti = data.jinaLaAkauntiYaMchango || "Mercy Joel Nchwali";
+    const mwishoMchango = data.mwishoWaKutoaMchango.trim() ? formatSwahiliDate(data.mwishoWaKutoaMchango) : "";
+    const hasPaymentDetails = data.ainaYaMchango.trim() || data.nambaYaSimuMchango.trim() || data.jinaLaAkauntiYaMchango.trim();
+    const isLandscape = data.mtindoWaMapambo === "gold-leaf-full";
+
+    let msg = `Habari ${mwalikwa},\n\n*MWALIKO WA HARUSI*\n\n`;
+    msg += `Ndugu, Jamaa na Rafiki,\n\n`;
+    if (isLandscape) {
+      msg += `Inayo heshima kubwa kukualika:\n`;
+      msg += `*${mwalikwa}*\n\n`;
+      msg += `Kwenye sherehe ya ndoa ya watoto wao wapendwa:\n`;
+      msg += `*${kijana}*\n\n`;
+      msg += `Mawifi na Maamuma wa:\n`;
+      msg += `*${wafadhili}${mahaliWafadhili}*\n\n`;
+    } else {
+      msg += `Inayo heshima kubwa,\n`;
+      msg += `*${wafadhili}${mahaliWafadhili}*\n\n`;
+      msg += `inayo heshima kubwa kukualika wewe mpendwa wetu:\n`;
+      msg += `*${mwalikwa}*\n\n`;
+      msg += `Kwenye sherehe ya ndoa ya watoto wao wapendwa:\n`;
+      msg += `*${kijana}*\n\n`;
+    }
+    msg += `📌 Ibada na sherehe zitafanyika tarehe *${tarehe}* katika ukumbi wa *${mahali}*.\n\n`;
     
-    let msg = `Habari ${mwalikwa}, \n\n*YAH: MWALIKO WA HARUSI*\n\n`;
-    msg += `Ndugu, jamaa na rafiki, tunayo furaha kubwa kukujulisha kuwa ${wafadhili}${mahaliWafadhili} inakualika wewe pamoja na familia yako katika sherehe ya ndoa ya kijana wao mpendwa *${kijana}*.\n\n`;
-    msg += `📌 *Ibada na Sherehe itafanyika:*\n`;
-    msg += `📅 *Tarehe:* ${tarehe}\n`;
-    msg += `📍 *Mahali:* ${mahali}\n\n`;
-    
-    if (data.nambaYaSimuMchango.trim()) {
+    if (hasPaymentDetails) {
       msg += `💰 *Michango na Malipo ya Uthibitisho:*\n`;
-      msg += `💳 *Njia ya Malipo:* ${data.ainaYaMchango || "M-PESA / BANK"}\n`;
-      msg += `👤 *Jina la Akaunti:* ${data.jinaLaAkauntiYaMchango || "Mratibu"}\n`;
-      msg += `🔢 *Namba ya Malipo:* ${data.nambaYaSimuMchango}\n`;
-      if (data.mwishoWaKutoaMchango) {
-        msg += `⏰ *Mwisho wa Kutoa Mchango:* ${formatSwahiliDate(data.mwishoWaKutoaMchango)}\n`;
+      msg += `Tafadhali kabidhi/tuma mchango wako kwa *${jinaAkaunti}*\n`;
+      msg += `- ${data.ainaYaMchango || "MPESA"}: *${data.nambaYaSimuMchango || "0754388813"}*\n`;
+      if (data.ainaYaMchangoPili && data.nambaYaSimuMchangoPili) {
+        msg += `- ${data.ainaYaMchangoPili}: *${data.nambaYaSimuMchangoPili}*\n`;
+      }
+      if (mwishoMchango) {
+        msg += `⏰ *Mwisho wa kupokea michango:* ${mwishoMchango}\n`;
       }
       msg += `\n`;
     }
     
     if (data.kamatiKuu.length > 0) {
-      msg += `📞 *Mawasiliano ya Kamati Kuu:*\n`;
+      msg += `📞 *Kamati ya Mawasiliano:*\n`;
       data.kamatiKuu.forEach(m => {
         if (m.name.trim() && m.phone.trim()) {
           msg += `- ${m.name}: ${m.phone}\n`;
@@ -170,7 +189,7 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
       msg += `\n`;
     }
     
-    msg += `Tunathamini sana uwepo wako. Karibu sana tushirikiane katika kufanikisha siku hii adhimu! 🙌💍`;
+    msg += `“Tunatanguliza shukrani zetu za dhati na Mungu awabariki sana”`;
     
     return encodeURIComponent(msg);
   };
@@ -341,6 +360,10 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
     const style = data.mtindoWaMapambo || "classic";
     const isLandscape = style === "gold-leaf-full";
     
+    // Spacing and font sizing helper for landscape to fit exactly on 1 page
+    const getSpacing = (base: number) => isLandscape ? Math.max(20, Math.round(base * 0.45)) : base;
+    const getFontSize = (base: number) => isLandscape ? Math.max(12, Math.round(base * 0.75)) : base;
+
     // Default Gold Style
     let borderColor = "B58622";
     let borderStyle: any = BorderStyle.DOUBLE;
@@ -395,18 +418,18 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
             properties: {
               page: {
                 size: {
-                  width: 11906,
-                  height: 16838,
+                  width: isLandscape ? 16838 : 11906,
+                  height: isLandscape ? 11906 : 16838,
                   orientation: isLandscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT,
                 },
                 margin: {
-                  top: 1440,
-                  bottom: 1440,
-                  left: 1440,
-                  right: 1440,
+                  top: isLandscape ? 960 : 1440,
+                  bottom: isLandscape ? 960 : 1440,
+                  left: isLandscape ? 960 : 1440,
+                  right: isLandscape ? 960 : 1440,
                 },
                 borders: {
-                  pageBorderTop: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
+                  pageBorderTop: { style: borderStyle, size: borderSize, color: borderColor, space: isLandscape ? 10 : 15 },
                   pageBorderBottom: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
                   pageBorderLeft: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
                   pageBorderRight: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
@@ -416,24 +439,24 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
             children: [
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 200, after: 100 },
+                spacing: { before: getSpacing(200), after: getSpacing(100) },
                 children: [
                   new TextRun({
                     text: topOrnament,
                     font: "Georgia",
-                    size: 32,
+                    size: getFontSize(32),
                     color: themeColorAccent,
                   }),
                 ],
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 300 },
+                spacing: { after: getSpacing(300) },
                 children: [
                   new TextRun({
                     text: "MCHANGO WA HARUSI",
                     font: "Playfair Display",
-                    size: 40,
+                    size: getFontSize(40),
                     bold: true,
                     color: themeColorPrimary,
                   }),
@@ -441,24 +464,24 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 400 },
+                spacing: { after: getSpacing(400) },
                 children: [
                   new TextRun({
                     text: "════════════════════",
                     font: "Georgia",
-                    size: 20,
+                    size: getFontSize(20),
                     color: themeColorAccent,
                   }),
                 ],
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 150 },
+                spacing: { after: getSpacing(150) },
                 children: [
                   new TextRun({
                     text: `${wafadhiliText} ${mahaliWafadhiliText}`,
                     font: "Playfair Display",
-                    size: 30,
+                    size: getFontSize(30),
                     bold: true,
                     color: "38240A",
                   }),
@@ -466,12 +489,12 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 150 },
+                spacing: { after: getSpacing(150) },
                 children: [
                   new TextRun({
                     text: "Wanayo furaha kukutaarifu/kuwataarifu",
                     font: "Georgia",
-                    size: 22,
+                    size: getFontSize(22),
                     italics: true,
                     color: "444444",
                   }),
@@ -479,12 +502,12 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 300 },
+                spacing: { after: getSpacing(300) },
                 children: [
                   new TextRun({
                     text: "Mhe./Prof./Dkt./Mch./Bw&Bibi/Bw./Bibi/Dr./Miss",
                     font: "Montserrat",
-                    size: 16,
+                    size: getFontSize(16),
                     bold: true,
                     color: "888888",
                   }),
@@ -492,12 +515,12 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 300 },
+                spacing: { after: getSpacing(300) },
                 children: [
                   new TextRun({
                     text: guestName.trim() || "__________________________________",
                     font: "Montserrat",
-                    size: 24,
+                    size: getFontSize(24),
                     bold: true,
                     underline: {},
                     color: "1C1917",
@@ -506,12 +529,12 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 200 },
+                spacing: { after: getSpacing(200) },
                 children: [
                   new TextRun({
                     text: `Kuwa ${uhusianoText}`,
                     font: "Georgia",
-                    size: 22,
+                    size: getFontSize(22),
                     italics: true,
                     color: "444444",
                   }),
@@ -519,12 +542,12 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 400 },
+                spacing: { after: getSpacing(400) },
                 children: [
                   new TextRun({
                     text: jinaKijanaText,
                     font: "Playfair Display",
-                    size: 48,
+                    size: getFontSize(48),
                     bold: true,
                     color: themeColorAccent,
                   }),
@@ -532,32 +555,32 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 400 },
+                spacing: { after: getSpacing(400) },
                 children: [
                   new TextRun({
                     text: `Anatarajia kufunga ndoa tarehe `,
                     font: "Georgia",
-                    size: 20,
+                    size: getFontSize(20),
                     color: "444444",
                   }),
                   new TextRun({
                     text: tareheNdoaText,
                     font: "Georgia",
                     bold: true,
-                    size: 20,
+                    size: getFontSize(20),
                     color: "111111",
                   }),
                   new TextRun({
                     text: ` ${mahaliNdoaText}. Hivyo ukiwa ndugu, jamaa na rafiki wa karibu wa familia hii unaombwa/mnaombwa kutoa mchango wako/wenu wa hali na mali kufanikisha shughuli hii muhimu. Tafadhali kabidhi mchango wako kwa `,
                     font: "Georgia",
-                    size: 20,
+                    size: getFontSize(20),
                     color: "444444",
                   }),
                   new TextRun({
                     text: jinaAkaunti,
                     font: "Georgia",
                     bold: true,
-                    size: 20,
+                    size: getFontSize(20),
                     color: "111111",
                   }),
                 ],
@@ -579,17 +602,22 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                           left: { style: BorderStyle.SINGLE, size: 8, color: borderColor },
                           right: { style: BorderStyle.SINGLE, size: 8, color: borderColor },
                         },
-                        margins: { top: 200, bottom: 200, left: 200, right: 200 },
+                        margins: { 
+                          top: getSpacing(200), 
+                          bottom: getSpacing(200), 
+                          left: getSpacing(200), 
+                          right: getSpacing(200) 
+                        },
                         children: [
                           new Paragraph({
                             alignment: AlignmentType.CENTER,
-                            spacing: { after: 100 },
+                            spacing: { after: getSpacing(100) },
                             children: [
                               new TextRun({
                                 text: `${data.ainaYaMchango || "MPESA"} – ${data.nambaYaSimuMchango || "0754388813"}`,
                                 font: "Courier New",
                                 bold: true,
-                                size: 22,
+                                size: getFontSize(22),
                                 color: themeColorPrimary,
                               }),
                               ...(data.ainaYaMchangoPili && data.nambaYaSimuMchangoPili ? [
@@ -597,7 +625,7 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                                   text: `  au  ${data.ainaYaMchangoPili} – ${data.nambaYaSimuMchangoPili}`,
                                   font: "Courier New",
                                   bold: true,
-                                  size: 22,
+                                  size: getFontSize(22),
                                   color: themeColorPrimary,
                                 })
                               ] : []),
@@ -609,7 +637,7 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                               new TextRun({
                                 text: `Mwisho wa kutoa mchango ni ${mwishoMchangoText}`,
                                 font: "Georgia",
-                                size: 18,
+                                size: getFontSize(18),
                                 bold: true,
                                 color: "444444",
                               }),
@@ -623,33 +651,73 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 400, after: 300 },
+                spacing: { before: getSpacing(400), after: getSpacing(300) },
                 children: [
                   new TextRun({
                     text: `“Tunatanguliza shukrani zetu za dhati na Mungu awabariki sana”`,
                     font: "Georgia",
                     bold: true,
                     italics: true,
-                    size: 18,
+                    size: getFontSize(18),
                     color: themeColorPrimary,
                   }),
                 ],
               }),
               ...(data.kamatiKuu.length > 0 ? [
-                new Paragraph({
-                  alignment: AlignmentType.LEFT,
-                  spacing: { before: 300, after: 100 },
-                  children: [
-                    new TextRun({
-                      text: "KWA MAWASILIANO:",
-                      font: "Montserrat",
-                      size: 16,
-                      bold: true,
-                      color: themeColorPrimary,
-                    }),
-                  ],
-                }),
-                ...data.kamatiKuu.map((m) => (
+                isLandscape ? (
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: getSpacing(200) },
+                    children: [
+                      new TextRun({
+                        text: "KWA MAWASILIANO:  ",
+                        font: "Montserrat",
+                        size: getFontSize(16),
+                        bold: true,
+                        color: themeColorPrimary,
+                      }),
+                      ...data.kamatiKuu.flatMap((m, index) => [
+                        new TextRun({
+                          text: `${m.name || "Mhusika"}: `,
+                          font: "Georgia",
+                          bold: true,
+                          size: getFontSize(18),
+                          color: "444444",
+                        }),
+                        new TextRun({
+                          text: m.phone || "---",
+                          font: "Courier New",
+                          bold: true,
+                          size: getFontSize(18),
+                          color: "111111",
+                        }),
+                        ...(index < data.kamatiKuu.length - 1 ? [
+                          new TextRun({
+                            text: "   |   ",
+                            font: "Georgia",
+                            size: getFontSize(18),
+                            color: themeColorAccent,
+                          })
+                        ] : [])
+                      ])
+                    ]
+                  })
+                ) : (
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    spacing: { before: 300, after: 100 },
+                    children: [
+                      new TextRun({
+                        text: "KWA MAWASILIANO:",
+                        font: "Montserrat",
+                        size: 16,
+                        bold: true,
+                        color: themeColorPrimary,
+                      }),
+                    ],
+                  })
+                ),
+                ...(!isLandscape ? data.kamatiKuu.map((m) => (
                   new Paragraph({
                     alignment: AlignmentType.LEFT,
                     spacing: { after: 50 },
@@ -670,7 +738,7 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                       }),
                     ],
                   })
-                ))
+                )) : [])
               ] : []),
             ],
           },
@@ -688,25 +756,25 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
 
     return new Document({
       background: {
-        color: "FFFDF9", // Matching Ivory card background color
+        color: "FFFDF9",
       },
       sections: [
         {
           properties: {
             page: {
               size: {
-                width: 11906, // A4 size width in dxa (8.27 in)
-                height: 16838, // A4 size height in dxa (11.69 in)
+                width: isLandscape ? 16838 : 11906,
+                height: isLandscape ? 11906 : 16838,
                 orientation: isLandscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT,
               },
               margin: {
-                top: 1440,
-                bottom: 1440,
-                left: 1440,
-                right: 1440,
+                top: isLandscape ? 960 : 1440,
+                bottom: isLandscape ? 960 : 1440,
+                left: isLandscape ? 960 : 1440,
+                right: isLandscape ? 960 : 1440,
               },
               borders: {
-                pageBorderTop: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
+                pageBorderTop: { style: borderStyle, size: borderSize, color: borderColor, space: isLandscape ? 10 : 15 },
                 pageBorderBottom: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
                 pageBorderLeft: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
                 pageBorderRight: { style: borderStyle, size: borderSize, color: borderColor, space: 15 },
@@ -714,216 +782,326 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
             },
           },
           children: [
-            // Decorative header ornament
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              spacing: { before: 200, after: 100 },
+              spacing: { before: getSpacing(200), after: getSpacing(100) },
               children: [
                 new TextRun({
                   text: topOrnament,
                   font: "Georgia",
-                  size: 32, // 16pt
+                  size: getFontSize(32),
                   color: themeColorAccent,
                 }),
               ],
             }),
             
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 300 },
-              children: [
-                new TextRun({
-                  text: "UMOJA NA UPENDO",
-                  font: "Montserrat",
-                  size: 18, // 9pt
-                  bold: true,
-                  color: subTitleColor,
-                }),
-              ],
-            }),
+            ...(!isLandscape ? [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(300) },
+                children: [
+                  new TextRun({
+                    text: "UMOJA NA UPENDO",
+                    font: "Montserrat",
+                    size: getFontSize(18),
+                    bold: true,
+                    color: subTitleColor,
+                  }),
+                ],
+              })
+            ] : []),
 
-            // Title
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              spacing: { after: 200 },
+              spacing: { after: getSpacing(200) },
               children: [
                 new TextRun({
                   text: "MWALIKO WA HARUSI",
                   font: "Playfair Display",
-                  size: 40, // 20pt
+                  size: getFontSize(40),
                   bold: true,
                   color: themeColorPrimary,
                 }),
               ],
             }),
 
-            // Horizontal spacer
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              spacing: { after: 400 },
+              spacing: { after: getSpacing(400) },
               children: [
                 new TextRun({
                   text: style === "royal" ? "⚜ ════════════════════ ⚜" : "════════════════════",
                   font: "Georgia",
-                  size: 20,
+                  size: getFontSize(20),
                   color: themeColorAccent,
                 }),
               ],
             }),
 
-            // Invitee salutation
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              spacing: { after: 150 },
+              spacing: { after: getSpacing(150) },
               children: [
                 new TextRun({
                   text: "NDUGU, JAMAA NA RAFIKI",
                   font: "Montserrat",
-                  size: 20,
+                  size: getFontSize(20),
                   bold: true,
                   color: "666666",
                 }),
               ],
             }),
 
+            ...(isLandscape ? [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(150) },
+                children: [
+                  new TextRun({
+                    text: "Inayo heshima kubwa kukualika:",
+                    font: "Georgia",
+                    size: getFontSize(22),
+                    italics: true,
+                    color: "444444",
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(300) },
+                children: [
+                  new TextRun({
+                    text: "Mhe./Prof./Dkt./Bw&Bibi/  ",
+                    font: "Playfair Display",
+                    size: getFontSize(24),
+                    italics: true,
+                    color: themeColorPrimary,
+                  }),
+                  new TextRun({
+                    text: guestName.trim() || "__________________________________",
+                    font: "Montserrat",
+                    size: getFontSize(24),
+                    bold: true,
+                    underline: {},
+                    color: "1C1917",
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(200) },
+                children: [
+                  new TextRun({
+                    text: "Kwenye sherehe ya ndoa ya watoto wao wapendwa:",
+                    font: "Georgia",
+                    size: getFontSize(22),
+                    color: "444444",
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(400) },
+                children: [
+                  new TextRun({
+                    text: jinaKijanaText,
+                    font: "Lucida Calligraphy",
+                    size: getFontSize(56),
+                    bold: true,
+                    color: themeColorAccent,
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(150) },
+                children: [
+                  new TextRun({
+                    text: "Mawifi na Maamuma wa:",
+                    font: "Georgia",
+                    size: getFontSize(22),
+                    italics: true,
+                    color: "444444",
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(100) },
+                children: [
+                  new TextRun({
+                    text: wafadhiliText,
+                    font: "Playfair Display",
+                    size: getFontSize(32),
+                    bold: true,
+                    color: "38240A",
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(300) },
+                children: [
+                  new TextRun({
+                    text: mahaliWafadhiliText,
+                    font: "Georgia",
+                    size: getFontSize(20),
+                    italics: true,
+                    color: "666666",
+                  }),
+                ],
+              }),
+            ] : [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(150) },
+                children: [
+                  new TextRun({
+                    text: "Inayo heshima kubwa,",
+                    font: "Georgia",
+                    size: getFontSize(22),
+                    italics: true,
+                    color: "444444",
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(100) },
+                children: [
+                  new TextRun({
+                    text: wafadhiliText,
+                    font: "Playfair Display",
+                    size: getFontSize(32),
+                    bold: true,
+                    color: "38240A",
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(150) },
+                children: [
+                  new TextRun({
+                    text: mahaliWafadhiliText,
+                    font: "Georgia",
+                    size: getFontSize(20),
+                    italics: true,
+                    color: "666666",
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(150) },
+                children: [
+                  new TextRun({
+                    text: "inayo heshima kubwa kukualika wewe mpendwa wetu:",
+                    font: "Georgia",
+                    size: getFontSize(22),
+                    color: "444444",
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(300) },
+                children: [
+                  new TextRun({
+                    text: "Mhe./Prof./Dkt./Bw&Bibi/  ",
+                    font: "Playfair Display",
+                    size: getFontSize(24),
+                    italics: true,
+                    color: themeColorPrimary,
+                  }),
+                  new TextRun({
+                    text: guestName.trim() || "__________________________________",
+                    font: "Montserrat",
+                    size: getFontSize(24),
+                    bold: true,
+                    underline: {},
+                    color: "1C1917",
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(200) },
+                children: [
+                  new TextRun({
+                    text: "Kwenye sherehe ya ndoa ya watoto wao wapendwa:",
+                    font: "Georgia",
+                    size: getFontSize(22),
+                    color: "444444",
+                  }),
+                ],
+              }),
+
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: getSpacing(400) },
+                children: [
+                  new TextRun({
+                    text: jinaKijanaText,
+                    font: "Lucida Calligraphy",
+                    size: getFontSize(56),
+                    bold: true,
+                    color: themeColorAccent,
+                  }),
+                ],
+              }),
+            ]),
+
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              spacing: { after: 100 },
+              spacing: { after: getSpacing(200) },
               children: [
                 new TextRun({
-                  text: "Inayo heshima kubwa,",
+                  text: `Ibada na sherehe zitafanyika tarehe `,
                   font: "Georgia",
-                  size: 22,
-                  italics: true,
+                  size: getFontSize(20),
+                  color: "444444",
+                }),
+                new TextRun({
+                  text: tareheNdoaText,
+                  font: "Georgia",
+                  bold: true,
+                  size: getFontSize(20),
+                  color: "111111",
+                }),
+                new TextRun({
+                  text: ` katika ukumbi wa `,
+                  font: "Georgia",
+                  size: getFontSize(20),
+                  color: "444444",
+                }),
+                new TextRun({
+                  text: mahaliNdoaText,
+                  font: "Georgia",
+                  bold: true,
+                  size: getFontSize(20),
+                  color: "111111",
+                }),
+                new TextRun({
+                  text: `.`,
+                  font: "Georgia",
+                  size: getFontSize(20),
                   color: "444444",
                 }),
               ],
             }),
 
-            // Host / Wafadhili
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 100 },
-              children: [
-                new TextRun({
-                  text: wafadhiliText,
-                  font: "Playfair Display",
-                  size: 32,
-                  bold: true,
-                  color: "38240A",
-                }),
-              ],
-            }),
-
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 300 },
-              children: [
-                new TextRun({
-                  text: mahaliWafadhiliText,
-                  font: "Georgia",
-                  size: 20,
-                  italics: true,
-                  color: "666666",
-                }),
-              ],
-            }),
-
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 300 },
-              children: [
-                new TextRun({
-                  text: "inayo heshima kubwa kukualika wewe mpendwa wetu:",
-                  font: "Georgia",
-                  size: 22,
-                  color: "444444",
-                }),
-              ],
-            }),
-
-            // Dynamic Guest Name input
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 300 },
-              children: [
-                new TextRun({
-                  text: "Mhe./Prof./Dkt./Bw&Bibi/  ",
-                  font: "Playfair Display",
-                  size: 24,
-                  italics: true,
-                  color: themeColorPrimary,
-                }),
-                new TextRun({
-                  text: guestName.trim() || "__________________________________",
-                  font: "Montserrat",
-                  size: 24,
-                  bold: true,
-                  underline: {},
-                  color: "1C1917",
-                }),
-              ],
-            }),
-
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 200 },
-              children: [
-                new TextRun({
-                  text: "Kwenye sherehe ya ndoa ya watoto wao wapendwa:",
-                  font: "Georgia",
-                  size: 22,
-                  color: "444444",
-                }),
-              ],
-            }),
-
-            // Couple names (Uses calligraphic script fallback font)
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 400 },
-              children: [
-                new TextRun({
-                  text: jinaKijanaText,
-                  font: "Lucida Calligraphy",
-                  size: 56,
-                  bold: true,
-                  color: themeColorAccent,
-                }),
-              ],
-            }),
-
-            // Date
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 150 },
-              children: [
-                new TextRun({
-                  text: `📅  TAREHE: ${tareheNdoaText}`,
-                  font: "Montserrat",
-                  size: 22,
-                  bold: true,
-                  color: "38240A",
-                }),
-              ],
-            }),
-
-            // Venue
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 500 },
-              children: [
-                new TextRun({
-                  text: `📍  MAHALI: ${mahaliNdoaText}`,
-                  font: "Montserrat",
-                  size: 20,
-                  bold: true,
-                  color: "38240A",
-                }),
-              ],
-            }),
-
-            // Payment Box Table
             ...(hasPaymentDetails ? [
               new Table({
                 alignment: AlignmentType.CENTER,
@@ -942,17 +1120,17 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                           left: { style: BorderStyle.SINGLE, size: 8, color: borderColor },
                           right: { style: BorderStyle.SINGLE, size: 8, color: borderColor },
                         },
-                        margins: { top: 200, bottom: 200, left: 200, right: 200 },
+                        margins: { top: getSpacing(150), bottom: getSpacing(150), left: getSpacing(200), right: getSpacing(200) },
                         children: [
                           new Paragraph({
                             alignment: AlignmentType.CENTER,
-                            spacing: { after: 100 },
+                            spacing: { after: getSpacing(80) },
                             children: [
                               new TextRun({
                                 text: "💰 MAELEZO YA MCHANGO",
                                 font: "Montserrat",
                                 bold: true,
-                                size: 18,
+                                size: getFontSize(18),
                                 color: themeColorPrimary,
                               }),
                             ],
@@ -963,7 +1141,7 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                               new TextRun({
                                 text: `Michango itumwe kupitia: ${data.ainaYaMchango || "[Njia ya Malipo]"} kwenda Jina: ${data.jinaLaAkauntiYaMchango || "[Jina la Akaunti]"}`,
                                 font: "Georgia",
-                                size: 18,
+                                size: getFontSize(18),
                                 color: "333333",
                               }),
                               ...(data.nambaYaSimuMchango ? [
@@ -971,7 +1149,16 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                                   text: `, Namba: ${data.nambaYaSimuMchango}`,
                                   font: "Georgia",
                                   bold: true,
-                                  size: 18,
+                                  size: getFontSize(18),
+                                  color: "111111",
+                                })
+                              ] : []),
+                              ...(data.ainaYaMchangoPili && data.nambaYaSimuMchangoPili ? [
+                                new TextRun({
+                                  text: ` au ${data.ainaYaMchangoPili} - ${data.nambaYaSimuMchangoPili}`,
+                                  font: "Georgia",
+                                  bold: true,
+                                  size: getFontSize(18),
                                   color: "111111",
                                 })
                               ] : []),
@@ -980,12 +1167,12 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                           ...(data.mwishoWaKutoaMchango ? [
                             new Paragraph({
                               alignment: AlignmentType.CENTER,
-                              spacing: { before: 100 },
+                              spacing: { before: getSpacing(80) },
                               children: [
                                 new TextRun({
                                   text: `Mwisho wa kupokea michango: ${mwishoMchangoText}`,
                                   font: "Georgia",
-                                  size: 16,
+                                  size: getFontSize(16),
                                   italics: true,
                                   color: themeColorPrimary,
                                 }),
@@ -1000,47 +1187,102 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
               })
             ] : []),
 
-            // Committee contacts list
             ...(data.kamatiKuu.length > 0 ? [
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { before: 400, after: 100 },
-                children: [
-                  new TextRun({
-                    text: "📞 KAMATI YA MAWASILIANO",
-                    font: "Montserrat",
-                    size: 16,
-                    bold: true,
-                    color: "666666",
-                  }),
-                ],
-              }),
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 400 },
-                children: [
-                  new TextRun({
-                    text: data.kamatiKuu
-                      .map((m) => `${m.name || "Mjumbe"}: ${m.phone || "---"}`)
-                      .join("  |  "),
-                    font: "Georgia",
-                    size: 18,
-                    color: "444444",
-                  }),
-                ],
-              }),
+              isLandscape ? (
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: getSpacing(250), after: getSpacing(100) },
+                  children: [
+                    new TextRun({
+                      text: "📞 KAMATI YA MAWASILIANO:  ",
+                      font: "Montserrat",
+                      size: getFontSize(16),
+                      bold: true,
+                      color: "666666",
+                    }),
+                    ...data.kamatiKuu.flatMap((m, index) => [
+                      new TextRun({
+                        text: `${m.name || "Mjumbe"}: `,
+                        font: "Georgia",
+                        bold: true,
+                        size: getFontSize(18),
+                        color: "444444",
+                      }),
+                      new TextRun({
+                        text: m.phone || "---",
+                        font: "Georgia",
+                        bold: true,
+                        size: getFontSize(18),
+                        color: "111111",
+                      }),
+                      ...(index < data.kamatiKuu.length - 1 ? [
+                        new TextRun({
+                          text: "   |   ",
+                          font: "Georgia",
+                          size: getFontSize(18),
+                          color: themeColorAccent,
+                        })
+                      ] : [])
+                    ])
+                  ]
+                })
+              ) : (
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: getSpacing(400), after: getSpacing(100) },
+                  children: [
+                    new TextRun({
+                      text: "📞 KAMATI YA MAWASILIANO",
+                      font: "Montserrat",
+                      size: getFontSize(16),
+                      bold: true,
+                      color: "666666",
+                    }),
+                  ],
+                })
+              ),
+              ...(!isLandscape ? [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: getSpacing(400) },
+                  children: [
+                    new TextRun({
+                      text: data.kamatiKuu
+                        .map((m) => `${m.name || "Mjumbe"}: ${m.phone || "---"}`)
+                        .join("  |  "),
+                      font: "Georgia",
+                      size: getFontSize(18),
+                      color: "444444",
+                    }),
+                  ],
+                })
+              ] : [])
             ] : []),
 
-            // Welcome message
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              spacing: { before: 300 },
+              spacing: { before: getSpacing(250), after: getSpacing(150) },
+              children: [
+                new TextRun({
+                  text: `“Tunatanguliza shukrani zetu za dhati na Mungu awabariki sana”`,
+                  font: "Georgia",
+                  bold: true,
+                  italics: true,
+                  size: getFontSize(18),
+                  color: themeColorPrimary,
+                }),
+              ],
+            }),
+
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: getSpacing(200) },
               children: [
                 new TextRun({
                   text: style === "royal" ? "*** KARIBUNI SANA MZEE NA MAMA KWA SHEREHE ***" : "*** KARIBUNI SANA SHANGAZI NA MJOMBA ***",
                   font: "Georgia",
                   bold: true,
-                  size: 16,
+                  size: getFontSize(16),
                   color: themeColorPrimary,
                 }),
               ],

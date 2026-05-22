@@ -15,10 +15,10 @@ const formatSwahiliDate = (dateStr: string) => {
   try {
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return dateStr;
-    
+
     const days = ["Jumapili", "Jumatatu", "Jumanne", "Jumatano", "Alhamisi", "Ijumaa", "Jumamosi"];
     const months = [
-      "Januari", "Februari", "Machi", "Aprili", "Mei", "Juni", 
+      "Januari", "Februari", "Machi", "Aprili", "Mei", "Juni",
       "Julai", "Agosti", "Septemba", "Oktoba", "Novemba", "Desemba"
     ];
     const dayName = days[date.getDay()];
@@ -62,16 +62,16 @@ const CenterMotif = () => (
         <circle key={r} cx="100" cy="100" r={r} stroke="currentColor" strokeWidth="0.5" opacity={0.6 - i * 0.1} />
       ))}
       {/* Interlocking Hearts */}
-      <path 
-        d="M 85 90 C 70 70, 45 75, 55 100 Q 85 130 85 130 Q 85 130 115 100 C 125 75, 100 70, 85 90 Z" 
-        stroke="currentColor" 
-        strokeWidth="1.5" 
+      <path
+        d="M 85 90 C 70 70, 45 75, 55 100 Q 85 130 85 130 Q 85 130 115 100 C 125 75, 100 70, 85 90 Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
         fill="currentColor"
         fillOpacity="0.04"
       />
-      <path 
-        d="M 115 90 C 100 70, 75 75, 85 100 Q 115 130 115 130 Q 115 130 145 100 C 155 75, 130 70, 115 90 Z" 
-        stroke="currentColor" 
+      <path
+        d="M 115 90 C 100 70, 75 75, 85 100 Q 115 130 115 130 Q 115 130 145 100 C 155 75, 130 70, 115 90 Z"
+        stroke="currentColor"
         strokeWidth="1.5"
         fill="currentColor"
         fillOpacity="0.04"
@@ -87,12 +87,12 @@ const CenterMotif = () => (
 
 // 1. Classic Corners
 const ClassicOrnamentLarge = ({ className }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 100 100" 
-    width="96" 
+  <svg
+    viewBox="0 0 100 100"
+    width="96"
     height="96"
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
     className={`absolute w-24 h-24 text-amber-600/35 select-none pointer-events-none z-0 ${className}`}
   >
     <path d="M 6 6 L 94 6 M 6 6 L 6 94" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -110,12 +110,12 @@ const ClassicOrnamentLarge = ({ className }: { className?: string }) => (
 );
 
 const ClassicOrnamentSmall = ({ className }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 80 80" 
+  <svg
+    viewBox="0 0 80 80"
     width="56"
     height="56"
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
     className={`absolute w-14 h-14 text-amber-600/20 select-none pointer-events-none z-0 ${className}`}
   >
     <path d="M 6 6 L 74 6 M 6 6 L 6 74" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -128,45 +128,45 @@ const ClassicOrnamentSmall = ({ className }: { className?: string }) => (
 
 // 2. Floral Corners
 const FloralOrnamentLarge = ({ className }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 120 120" 
+  <svg
+    viewBox="0 0 120 120"
     width="110"
     height="110"
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
     className={`absolute w-[110px] h-[110px] text-amber-600/35 select-none pointer-events-none z-0 ${className}`}
   >
     {/* Frame guide line */}
     <path d="M 6 6 L 110 6 M 6 6 L 6 110" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.25" />
-    
+
     {/* Winding vines */}
     <path d="M 6 6 Q 35 8, 70 20 Q 95 32, 112 50" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     <path d="M 6 6 Q 8 35, 20 70 Q 32 95, 50 112" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    
+
     {/* Intricate peony blossom (approx center (56, 46)) */}
     <path d="M 40 40 C 35 30, 48 20, 58 28 C 68 18, 80 30, 72 40 C 82 48, 70 65, 55 58 C 42 62, 32 50, 40 40 Z" fill="currentColor" fillOpacity="0.45" />
     <path d="M 45 42 C 42 35, 52 28, 56 34 C 60 28, 70 35, 67 42 C 70 48, 62 55, 56 50 C 50 55, 42 48, 45 42 Z" fill="#FFFDF9" fillRule="evenodd" />
     <path d="M 45 42 C 42 35, 52 28, 56 34 C 60 28, 70 35, 67 42 C 70 48, 62 55, 56 50 C 50 55, 42 48, 45 42 Z" stroke="currentColor" strokeWidth="1" />
     <circle cx="56" cy="40" r="3.5" fill="currentColor" fillOpacity="0.75" />
-    
+
     {/* Rosebud 1 */}
     <path d="M 22 22 C 16 16, 26 10, 28 18 C 30 10, 38 18, 30 26 C 28 28, 18 26, 22 22 Z" fill="currentColor" fillOpacity="0.6" />
     <path d="M 22 22 L 14 14" stroke="currentColor" strokeWidth="1" />
-    
+
     {/* Rosebud 2 */}
     <path d="M 85 85 C 80 78, 90 72, 92 80 C 94 72, 102 80, 94 88 C 92 90, 80 88, 85 85 Z" fill="currentColor" fillOpacity="0.6" />
     <path d="M 85 85 L 77 77" stroke="currentColor" strokeWidth="1" />
-    
+
     {/* Detailed Leaves */}
     <path d="M 70 20 C 80 15, 88 18, 92 25 C 85 30, 77 28, 70 20 Z" fill="currentColor" fillOpacity="0.6" />
     <path d="M 70 20 L 86 23" stroke="currentColor" strokeWidth="0.8" />
-    
+
     <path d="M 20 70 C 15 80, 18 88, 25 92 C 30 85, 28 77, 20 70 Z" fill="currentColor" fillOpacity="0.6" />
     <path d="M 20 70 L 23 86" stroke="currentColor" strokeWidth="0.8" />
 
     <path d="M 12 12 C 15 5, 25 5, 28 12 C 22 18, 15 18, 12 12 Z" fill="currentColor" fillOpacity="0.7" />
     <path d="M 12 12 C 5 15, 5 25, 12 28 C 18 22, 18 15, 12 12 Z" fill="currentColor" fillOpacity="0.7" />
-    
+
     <circle cx="6" cy="6" r="3.5" fill="currentColor" />
     <circle cx="112" cy="50" r="2" fill="currentColor" />
     <circle cx="50" cy="112" r="2" fill="currentColor" />
@@ -174,12 +174,12 @@ const FloralOrnamentLarge = ({ className }: { className?: string }) => (
 );
 
 const FloralOrnamentSmall = ({ className }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 80 80" 
+  <svg
+    viewBox="0 0 80 80"
     width="56"
     height="56"
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
     className={`absolute w-14 h-14 text-amber-600/20 select-none pointer-events-none z-0 ${className}`}
   >
     <path d="M 6 6 L 70 6 M 6 6 L 6 70" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.25" />
@@ -195,17 +195,16 @@ const FloralOrnamentSmall = ({ className }: { className?: string }) => (
 
 // Side Vine Ornament for margins (Floral style)
 const SideVineOrnament = ({ isLeft }: { isLeft: boolean }) => (
-  <div 
-    className={`absolute top-[18%] bottom-[18%] flex flex-col justify-between items-center text-amber-600/25 pointer-events-none select-none z-0 ${
-      isLeft ? "left-2.5" : "right-2.5"
-    }`}
+  <div
+    className={`absolute top-[18%] bottom-[18%] flex flex-col justify-between items-center text-amber-600/25 pointer-events-none select-none z-0 ${isLeft ? "left-2.5" : "right-2.5"
+      }`}
   >
     <svg viewBox="0 0 20 360" width="16" height="360" className="w-4 h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M 10 0 L 10 360" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
       {[30, 90, 150, 210, 270, 330].map((y) => (
         <React.Fragment key={y}>
-          <path d={`M 10 ${y} C 16 ${y-5}, 19 ${y-5}, 19 ${y} C 16 ${y+5}, 13 ${y+5}, 10 ${y} Z`} fill="currentColor" />
-          <path d={`M 10 ${y} C 4 ${y-5}, 1 ${y-5}, 1 ${y} C 4 ${y+5}, 7 ${y+5}, 10 ${y} Z`} fill="currentColor" />
+          <path d={`M 10 ${y} C 16 ${y - 5}, 19 ${y - 5}, 19 ${y} C 16 ${y + 5}, 13 ${y + 5}, 10 ${y} Z`} fill="currentColor" />
+          <path d={`M 10 ${y} C 4 ${y - 5}, 1 ${y - 5}, 1 ${y} C 4 ${y + 5}, 7 ${y + 5}, 10 ${y} Z`} fill="currentColor" />
         </React.Fragment>
       ))}
     </svg>
@@ -214,12 +213,12 @@ const SideVineOrnament = ({ isLeft }: { isLeft: boolean }) => (
 
 // 3. Royal Baroque Corners
 const RoyalOrnamentLarge = ({ className }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 120 120" 
+  <svg
+    viewBox="0 0 120 120"
     width="112"
     height="112"
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
     className={`absolute w-28 h-28 text-amber-600/35 select-none pointer-events-none z-0 ${className}`}
   >
     <path d="M 6 6 C 25 3, 62 10, 52 35 C 44 47, 26 40, 30 25 C 33 15, 48 16, 42 28 C 39 34, 32 32, 34 24" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -235,12 +234,12 @@ const RoyalOrnamentLarge = ({ className }: { className?: string }) => (
 );
 
 const RoyalOrnamentSmall = ({ className }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 80 80" 
+  <svg
+    viewBox="0 0 80 80"
     width="56"
     height="56"
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
     className={`absolute w-14 h-14 text-amber-600/20 select-none pointer-events-none z-0 ${className}`}
   >
     <path d="M 6 6 C 18 4, 35 8, 30 20 C 25 28, 15 24, 18 15 C 20 9, 28 10, 25 16" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
@@ -252,27 +251,26 @@ const RoyalOrnamentSmall = ({ className }: { className?: string }) => (
 
 // Header/Footer Center Divider (Royal style)
 const HeaderDividerOrnament = ({ isTop }: { isTop: boolean }) => (
-  <div className={`w-full flex justify-center text-amber-600/50 pointer-events-none select-none z-10 ${
-    isTop ? "mb-1" : "mt-2"
-  }`}>
+  <div className={`w-full flex justify-center text-amber-600/50 pointer-events-none select-none z-10 ${isTop ? "mb-1" : "mt-2"
+    }`}>
     <svg viewBox="0 0 200 20" width="192" height="20" className="w-48 h-5" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path 
-        d="M 10 10 C 50 10, 70 3, 100 10 C 130 3, 150 10, 190 10" 
-        stroke="currentColor" 
-        strokeWidth="1.2" 
-        strokeLinecap="round" 
+      <path
+        d="M 10 10 C 50 10, 70 3, 100 10 C 130 3, 150 10, 190 10"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
       />
-      <path 
-        d="M 85 10 C 95 18, 105 18, 115 10 C 120 6, 125 10, 122 14 C 119 18, 112 15, 115 11" 
-        stroke="currentColor" 
-        strokeWidth="1.2" 
-        strokeLinecap="round" 
+      <path
+        d="M 85 10 C 95 18, 105 18, 115 10 C 120 6, 125 10, 122 14 C 119 18, 112 15, 115 11"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
       />
-      <path 
-        d="M 115 10 C 105 2, 95 2, 85 10 C 80 14, 75 10, 78 6 C 81 2, 88 5, 85 9" 
-        stroke="currentColor" 
-        strokeWidth="1.2" 
-        strokeLinecap="round" 
+      <path
+        d="M 115 10 C 105 2, 95 2, 85 10 C 80 14, 75 10, 78 6 C 81 2, 88 5, 85 9"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
       />
       <circle cx="100" cy="10" r="2" fill="currentColor" />
     </svg>
@@ -296,12 +294,12 @@ const GoldLeafBackground = () => (
 );
 
 const GoldLeafBranchTopRight = () => (
-  <svg 
-    viewBox="0 0 250 250" 
-    width="220" 
-    height="220" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
+  <svg
+    viewBox="0 0 250 250"
+    width="220"
+    height="220"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
     className="absolute top-0 right-0 text-amber-600/35 select-none pointer-events-none z-0"
   >
     <path d="M 250 0 C 180 50, 110 80, 50 90 C 20 95, 0 110, -20 130" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -325,12 +323,12 @@ const GoldLeafBranchTopRight = () => (
 );
 
 const GoldLeafBranchBottomLeft = () => (
-  <svg 
-    viewBox="0 0 250 250" 
-    width="220" 
-    height="220" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
+  <svg
+    viewBox="0 0 250 250"
+    width="220"
+    height="220"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
     className="absolute bottom-0 left-0 text-amber-600/35 select-none pointer-events-none z-0 rotate-180"
   >
     <path d="M 250 0 C 180 50, 110 80, 50 90 C 20 95, 0 110, -20 130" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -354,12 +352,12 @@ const GoldLeafBranchBottomLeft = () => (
 );
 
 const GoldLeafBranchTopLeftSmall = () => (
-  <svg 
-    viewBox="0 0 250 250" 
-    width="110" 
-    height="110" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
+  <svg
+    viewBox="0 0 250 250"
+    width="110"
+    height="110"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
     className="absolute top-0 left-0 text-amber-600/20 select-none pointer-events-none z-0 -rotate-90"
   >
     <path d="M 250 0 C 180 50, 110 80, 50 90 C 20 95, 0 110, -20 130" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
@@ -369,12 +367,12 @@ const GoldLeafBranchTopLeftSmall = () => (
 );
 
 const GoldLeafBranchBottomRightSmall = () => (
-  <svg 
-    viewBox="0 0 250 250" 
-    width="110" 
-    height="110" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
+  <svg
+    viewBox="0 0 250 250"
+    width="110"
+    height="110"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
     className="absolute bottom-0 right-0 text-amber-600/20 select-none pointer-events-none z-0 rotate-90"
   >
     <path d="M 250 0 C 180 50, 110 80, 50 90 C 20 95, 0 110, -20 130" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
@@ -391,17 +389,17 @@ interface SweepingFrondClusterProps {
 }
 
 const SweepingFrondCluster = ({ className, style }: SweepingFrondClusterProps) => (
-  <svg 
-    viewBox="0 0 220 260" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
+  <svg
+    viewBox="0 0 220 260"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
     className={`absolute w-2/5 h-3/5 select-none pointer-events-none z-0 stroke-[#d4af37] opacity-[0.28] ${className || ""}`}
     style={style}
   >
     {/* Frond 1: Large sweeping diagonal palm frond */}
     {/* Stem */}
     <path d="M 5 5 C 60 60, 120 130, 210 210" strokeWidth="1.2" strokeLinecap="round" />
-    
+
     {/* Leaflets radiating from the stem */}
     {/* Left side leaflets */}
     <path d="M 20 20 Q 5 45, -10 65 Q 10 50, 30 31" strokeWidth="0.8" />
@@ -411,7 +409,7 @@ const SweepingFrondCluster = ({ className, style }: SweepingFrondClusterProps) =
     <path d="M 100 100 Q 60 165, 30 220 Q 80 170, 117 117" strokeWidth="0.8" />
     <path d="M 120 120 Q 80 195, 50 255 Q 98 198, 138 138" strokeWidth="0.8" />
     <path d="M 140 140 Q 100 215, 80 270 Q 120 218, 158 158" strokeWidth="0.8" />
-    
+
     {/* Right side leaflets */}
     <path d="M 20 20 Q 45 5, 65 -10 Q 50 10, 30 31" strokeWidth="0.8" />
     <path d="M 40 40 Q 75 15, 105 -5 Q 80 25, 52 52" strokeWidth="0.8" />
@@ -436,7 +434,7 @@ const SweepingFrondCluster = ({ className, style }: SweepingFrondClusterProps) =
     <path d="M 60 70 Q 115 140, 165 200 Q 108 132, 60 70" strokeWidth="0.8" />
     <path d="M 60 70 Q 125 120, 185 165 Q 115 115, 60 70" strokeWidth="0.8" />
     <path d="M 60 70 Q 130 95, 200 125 Q 120 95, 60 70" strokeWidth="0.8" />
-    
+
     {/* Frond 3: Smaller secondary frond layering behind */}
     {/* Stem */}
     <path d="M 30 0 Q 60 30, 100 60" strokeWidth="0.8" strokeLinecap="round" opacity="0.7" />
@@ -473,7 +471,7 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
     const mahaliWafadhiliText = data.mahaliPaWafadhili.trim() ? `wa ${data.mahaliPaWafadhili}` : "wa Ipagala -Dodoma";
     const jinaKijanaText = data.jinaLaKijana.trim() || "Bright Mujulizi Kimaro";
     const uhusianoText = data.uhusianoWaKijana?.trim() || "kijana wao mpendwa";
-    
+
     // YYYY-MM-DD to DD/MM/YYYY formatting helper
     const formatSwahiliDateShort = (dateStr: string) => {
       if (!dateStr) return "";
@@ -487,13 +485,13 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
         return dateStr;
       }
     };
-    
-    const tareheNdoaText = data.tareheYaNdoa.trim() 
-      ? formatSwahiliDateShort(data.tareheYaNdoa) 
+
+    const tareheNdoaText = data.tareheYaNdoa.trim()
+      ? formatSwahiliDateShort(data.tareheYaNdoa)
       : "12/09/2026";
-      
+
     const mahaliNdoaText = data.mahaliPaNdoa.trim() || "mjini Dodoma";
-    
+
     const mwishoMchangoText = data.mwishoWaKutoaMchango.trim()
       ? formatSwahiliDateShort(data.mwishoWaKutoaMchango)
       : "30/08/2026";
@@ -503,7 +501,7 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
     // 1. Strict Landscape Card Layout (Luxury Gold Leaf Lalo)
     if (style === "gold-leaf-full") {
       const cardEl = (
-        <div 
+        <div
           ref={ref}
           id={isCapture ? "wedding-card-capture" : undefined}
           className="relative w-[900px] h-[650px] shrink-0 overflow-hidden flex justify-center items-center shadow-2xl rounded-xl font-sans select-none text-stone-900"
@@ -513,7 +511,7 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
 
           {/* Layer 3: Inner Content Card */}
           <div className="relative z-10 w-[85%] h-full mx-auto flex flex-col justify-center items-center text-center bg-transparent px-12 py-10 md:px-16 md:py-12">
-            
+
             {/* Header Title */}
             <div className="mt-1">
               <h1 className="whitespace-nowrap text-3xl font-serif font-bold not-italic mb-2 text-[#8b5a2b] text-center">
@@ -526,11 +524,11 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
               <p className="font-serif italic text-gray-800 text-base md:text-lg leading-relaxed text-center font-bold">
                 {wafadhiliText} {mahaliWafadhiliText}
               </p>
-              
+
               <p className="font-serif italic text-gray-800 text-base md:text-lg leading-relaxed text-center">
                 Wanayo furaha kukutaarifu/kuwataarifu
               </p>
-              
+
               <p className="font-serif italic text-gray-800 text-base md:text-lg leading-relaxed text-center">
                 Mhe./Prof./Dkt./Mch./Bw&Bibi/Bw./Bibi/Dr./Miss
               </p>
@@ -551,7 +549,7 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
               </h2>
 
               <p className="font-serif italic text-gray-800 text-sm md:text-[15px] leading-relaxed text-center max-w-[95%]">
-                Anatarajia kufunga ndoa tarahe <span className="font-bold not-italic">{tareheNdoaText}</span> {mahaliNdoaText}. Hivyo ukiwa ndugu, jamaa na rafiki wa karibu wa familia hii unaombwa/mnaombwa kutoa mchango wako/wenu wa hali na mali kufanikisha shughuli hii muhimu. Tafadhali kabidhi mchango wako kwa <span className="not-italic font-sans font-bold text-gray-900 tracking-wide text-lg">{data.jinaLaAkauntiYaMchango || "Mercy Joel Nchwali"}</span>
+                Anatarajia kufunga ndoa tarehe <span className="font-bold not-italic">{tareheNdoaText}</span> {mahaliNdoaText}. Hivyo ukiwa ndugu, jamaa na rafiki wa karibu wa familia hii unaombwa/mnaombwa kutoa mchango wako/wenu wa hali na mali kufanikisha shughuli hii muhimu. Tafadhali kabidhi mchango wako kwa <span className="not-italic font-sans font-bold text-gray-900 tracking-wide text-lg">{data.jinaLaAkauntiYaMchango || "Mercy Joel Nchwali"}</span>
               </p>
 
               {/* Payment Details embedded in paragraph/flow - no outer card */}
@@ -606,7 +604,7 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
     }
 
     return (
-      <div 
+      <div
         ref={ref}
         id={isCapture ? "wedding-card-capture" : undefined}
         className="w-[550px] relative bg-[#FFFDF9] text-stone-900 border border-amber-700/60 rounded-2xl p-1.5 overflow-hidden font-sans select-none"
@@ -683,13 +681,13 @@ const ContributionCardContent = React.forwardRef<HTMLDivElement, ContributionCar
                   <p className="font-serif italic">
                     Kuwa {uhusianoText}
                   </p>
-                  <h2 
+                  <h2
                     className="text-2xl font-serif font-black italic text-amber-900 tracking-wide my-1.5 drop-shadow-[0_2px_4px_rgba(217,119,6,0.1)]"
                   >
                     {jinaKijanaText}
                   </h2>
                   <p className="font-serif italic px-2 text-stone-700">
-                    Anatarajia kufunga ndoa tarahe <span className="font-bold not-italic">{tareheNdoaText}</span> {mahaliNdoaText}. Hivyo ukiwa ndugu, jamaa na rafiki wa karibu wa familia hii unaombwa/mnaombwa kutoa mchango wako/wenu wa hali na mali kufanikisha shughuli hii muhimu. Tafadhali kabidhi mchango wako kwa <span className="font-bold not-italic text-amber-950">{data.jinaLaAkauntiYaMchango || "Mercy Joel Nchwali"}</span>
+                    Anatarajia kufunga ndoa tarehe <span className="font-bold not-italic">{tareheNdoaText}</span> {mahaliNdoaText}. Hivyo ukiwa ndugu, jamaa na rafiki wa karibu wa familia hii unaombwa/mnaombwa kutoa mchango wako/wenu wa hali na mali kufanikisha shughuli hii muhimu. Tafadhali kabidhi mchango wako kwa <span className="font-bold not-italic text-amber-950">{data.jinaLaAkauntiYaMchango || "Mercy Joel Nchwali"}</span>
                   </p>
                 </div>
                 <div className="bg-[#FEFCF5] border border-amber-200/40 rounded-xl p-3.5 max-w-md mx-auto my-3 space-y-1.5 shadow-2xs">
@@ -748,13 +746,13 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
     const wafadhiliText = data.wafadhili.trim() || "Familia ya Bw. & Bibi John Nchwali";
     const mahaliWafadhiliText = data.mahaliPaWafadhili.trim() ? `ya ${data.mahaliPaWafadhili}` : "ya Dodoma, Tanzania";
     const jinaKijanaText = data.jinaLaKijana.trim() || "Maharusi Wapendwa";
-    
-    const tareheNdoaText = data.tareheYaNdoa.trim() 
-      ? formatSwahiliDate(data.tareheYaNdoa) 
+
+    const tareheNdoaText = data.tareheYaNdoa.trim()
+      ? formatSwahiliDate(data.tareheYaNdoa)
       : "[Siku ya Sherehe]";
-      
+
     const mahaliNdoaText = data.mahaliPaNdoa.trim() || "[Ukumbi na Mahali pa Ibada]";
-    
+
     const mwishoMchangoText = data.mwishoWaKutoaMchango.trim()
       ? formatSwahiliDate(data.mwishoWaKutoaMchango)
       : "[Siku ya Mwisho]";
@@ -765,7 +763,7 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
     // 1. Strict Landscape Card Layout (Luxury Gold Leaf Lalo)
     if (style === "gold-leaf-full") {
       const cardEl = (
-        <div 
+        <div
           ref={ref}
           id={isCapture ? "wedding-card-capture" : undefined}
           className="relative w-[900px] h-[650px] shrink-0 overflow-hidden flex justify-center items-center shadow-2xl rounded-xl font-sans select-none text-stone-900"
@@ -775,7 +773,7 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
 
           {/* Layer 3: Inner Content Card */}
           <div className="relative z-10 w-[85%] h-full mx-auto flex flex-col justify-center items-center text-center bg-transparent px-12 py-10 md:px-16 md:py-12">
-            
+
             {/* Header Title */}
             <div className="mt-1">
               <h1 className="whitespace-nowrap text-3xl font-serif font-bold not-italic mb-2 text-[#8b5a2b] text-center">
@@ -788,7 +786,7 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
               <p className="font-serif italic text-gray-800 text-base md:text-lg leading-relaxed text-center uppercase tracking-wider font-bold">
                 Ndugu, Jamaa na Rafiki
               </p>
-              
+
               <p className="font-serif italic text-gray-800 text-base md:text-lg leading-relaxed text-center">
                 Inayo heshima kubwa kukualika:
               </p>
@@ -867,7 +865,7 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
     }
 
     return (
-      <div 
+      <div
         ref={ref}
         id={isCapture ? "wedding-card-capture" : undefined}
         className="w-[550px] relative bg-[#FFFDF9] text-stone-900 border border-amber-700/60 rounded-2xl p-1.5 overflow-hidden font-sans select-none"
@@ -967,7 +965,7 @@ const InvitationCardContent = React.forwardRef<HTMLDivElement, InvitationCardCon
                   Kwenye sherehe ya ndoa ya watoto wao wapendwa:
                 </p>
                 <div className="my-1.5 relative">
-                  <h2 
+                  <h2
                     className="text-4xl font-script text-amber-700 py-1.5 font-normal select-none drop-shadow-[0_2px_8px_rgba(217,119,6,0.18)]"
                     style={{ textShadow: "0 2px 12px rgba(180, 134, 34, 0.18)" }}
                   >
@@ -1098,11 +1096,11 @@ export default function InvitationPreview({ data, cardRef }: InvitationPreviewPr
   const cardHeight = orientation === "landscape" ? 650 : 660;
 
   return (
-    <div 
-      ref={containerRef} 
+    <div
+      ref={containerRef}
       className="w-full flex flex-col justify-center items-center overflow-hidden py-4 relative"
     >
-      <div 
+      <div
         style={{
           transform: `scale(${scale})`,
           transformOrigin: "top center",
@@ -1115,7 +1113,7 @@ export default function InvitationPreview({ data, cardRef }: InvitationPreviewPr
         <InvitationCardContent data={data} isCapture={false} />
       </div>
 
-      <div 
+      <div
         className="fixed top-0 left-0 pointer-events-none z-[-50] opacity-0"
         aria-hidden="true"
       >
