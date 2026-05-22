@@ -7,16 +7,20 @@ import InvitationForm from "../components/InvitationForm";
 import InvitationPreview from "../components/InvitationPreview";
 import ActionButtons from "../components/ActionButtons";
 
-const INITIAL_DATA: InvitationData = {
+const INITIAL_INVITATION_DATA: InvitationData = {
+  cardType: "invitation",
   jinaLaMwalikwa: "",
   wafadhili: "Familia ya Bw. & Bibi John Nchwali",
   mahaliPaWafadhili: "Ipagala - Dodoma",
   jinaLaKijana: "Bright Mujulizi & Mercy Joel",
+  uhusianoWaKijana: "watoto wao wapendwa",
   tareheYaNdoa: "2026-08-22",
   mahaliPaNdoa: "Kanisa la KKKT Ipagala, mjini Dodoma",
   ainaYaMchango: "M-PESA",
   jinaLaAkauntiYaMchango: "Mercy Joel Nchwali",
   nambaYaSimuMchango: "0754123456",
+  ainaYaMchangoPili: "",
+  nambaYaSimuMchangoPili: "",
   mwishoWaKutoaMchango: "2026-08-10",
   kamatiKuu: [
     { id: "1", name: "Bw. John Joel (Mwenyekiti)", phone: "0754123456" },
@@ -25,11 +29,53 @@ const INITIAL_DATA: InvitationData = {
   mtindoWaMapambo: "classic"
 };
 
+const INITIAL_CONTRIBUTION_DATA: InvitationData = {
+  cardType: "contribution",
+  jinaLaMwalikwa: "",
+  wafadhili: "Familia ya Bw. John Nchwali Joel na Mercy Nchwali",
+  mahaliPaWafadhili: "Ipagala -Dodoma",
+  jinaLaKijana: "Bright Mujulizi Kimaro",
+  uhusianoWaKijana: "kijana wao mpendwa",
+  tareheYaNdoa: "2026-09-12",
+  mahaliPaNdoa: "Dodoma",
+  ainaYaMchango: "MPESA",
+  jinaLaAkauntiYaMchango: "Mercy Joel Nchwali",
+  nambaYaSimuMchango: "0754388813",
+  ainaYaMchangoPili: "CRDB",
+  nambaYaSimuMchangoPili: "0152081488900",
+  mwishoWaKutoaMchango: "2026-08-30",
+  kamatiKuu: [
+    { id: "1", name: "John Nchwali Joel", phone: "0754260831" },
+    { id: "2", name: "Mercy Nchwali", phone: "0754388813" }
+  ],
+  mtindoWaMapambo: "gold-leaf"
+};
+
 export default function Home() {
-  const [data, setData] = useState<InvitationData>(INITIAL_DATA);
+  const [data, setData] = useState<InvitationData>(INITIAL_INVITATION_DATA);
   const [excelData, setExcelData] = useState<{ name: string; phone: string }[] | null>(null);
   const [excelFileName, setExcelFileName] = useState<string>("");
+  const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
   const cardRef = useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (data.mtindoWaMapambo === "gold-leaf-full") {
+      setOrientation("landscape");
+    } else {
+      setOrientation("portrait");
+    }
+  }, [data.mtindoWaMapambo]);
+
+  const handleCardTypeChange = (type: "invitation" | "contribution") => {
+    // Reset data and excel details when switching modes
+    setExcelData(null);
+    setExcelFileName("");
+    if (type === "invitation") {
+      setData(INITIAL_INVITATION_DATA);
+    } else {
+      setData(INITIAL_CONTRIBUTION_DATA);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF9F5]">
@@ -58,7 +104,34 @@ export default function Home() {
       </header>
 
       {/* Main Dashboard Layout */}
-      <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-8">
+      <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-8 space-y-6">
+        
+        {/* Card Type Selector Tabs */}
+        <div className="flex bg-stone-100 p-1.5 rounded-2xl max-w-md mx-auto shadow-xs border border-stone-200/30">
+          <button
+            onClick={() => handleCardTypeChange("invitation")}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer ${
+              data.cardType !== "contribution"
+                ? "bg-white text-stone-900 shadow-sm"
+                : "text-stone-500 hover:text-stone-800"
+            }`}
+          >
+            <Heart className={`w-4 h-4 ${data.cardType !== "contribution" ? "text-amber-500 fill-amber-500" : "text-stone-400"}`} />
+            Kadi ya Mwaliko
+          </button>
+          <button
+            onClick={() => handleCardTypeChange("contribution")}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer ${
+              data.cardType === "contribution"
+                ? "bg-white text-stone-900 shadow-sm"
+                : "text-stone-500 hover:text-stone-800"
+            }`}
+          >
+            <Sparkles className={`w-4 h-4 ${data.cardType === "contribution" ? "text-amber-500" : "text-stone-400"}`} />
+            Kadi ya Mchango
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-start">
           
           {/* LEFT COLUMN: Input Form (Takes 5 cols on lg) */}
@@ -94,7 +167,7 @@ export default function Home() {
             </div>
 
             {/* Card Live Render Component */}
-            <div className="bg-stone-50 rounded-2xl p-4 border border-stone-200/40 shadow-inner flex items-center justify-center">
+            <div className="bg-stone-50 rounded-2xl border border-stone-200/40 shadow-inner flex items-center justify-center p-4 min-h-[500px] w-full">
               <InvitationPreview data={data} cardRef={cardRef} />
             </div>
 
