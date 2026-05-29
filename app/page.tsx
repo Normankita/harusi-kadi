@@ -24,7 +24,8 @@ const INITIAL_INVITATION_DATA: InvitationData = {
   mwishoWaKutoaMchango: "2026-08-10",
   kamatiKuu: [
     { id: "1", name: "Bw. John Joel (Mwenyekiti)", phone: "0754123456" },
-    { id: "2", name: "Bi. Mercy Nchwali (Mhazini)", phone: "0712345678" }
+    { id: "2", name: "Bi. Mercy Nchwali (Mhazini)", phone: "0712345678" },
+    { id: "3", name: "Bw. George Nchwali (Mhazini)", phone: "0754413117" }
   ],
   mtindoWaMapambo: "classic"
 };
@@ -46,7 +47,8 @@ const INITIAL_CONTRIBUTION_DATA: InvitationData = {
   mwishoWaKutoaMchango: "2026-08-30",
   kamatiKuu: [
     { id: "1", name: "John Nchwali Joel", phone: "0754260831" },
-    { id: "2", name: "Mercy Nchwali", phone: "0754388813" }
+    { id: "2", name: "Mercy Nchwali", phone: "0754388813" },
+    { id: "3", name: "George Nchwali", phone: "0754413117" }
   ],
   mtindoWaMapambo: "gold-leaf"
 };
