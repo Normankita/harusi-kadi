@@ -1,11 +1,14 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { Heart, Sparkles, HelpCircle } from "lucide-react";
+import { Heart, Sparkles, HelpCircle, CheckCircle2 } from "lucide-react";
 import { InvitationData } from "../types";
 import InvitationForm from "../components/InvitationForm";
 import InvitationPreview from "../components/InvitationPreview";
 import ActionButtons from "../components/ActionButtons";
+import LanguageSwitcher from "../components/ui/LanguageSwitcher";
+import ThemeSwitcher from "../components/ui/ThemeSwitcher";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 const INITIAL_INVITATION_DATA: InvitationData = {
   cardType: "invitation",
@@ -53,7 +56,62 @@ const INITIAL_CONTRIBUTION_DATA: InvitationData = {
   mtindoWaMapambo: "gold-leaf"
 };
 
+// Step indicator component
+function StepIndicator({ currentStep }: { currentStep: 1 | 2 | 3 }) {
+  const { tr } = useLanguage();
+  const steps = [
+    { num: 1, label: tr('step1') },
+    { num: 2, label: tr('step2') },
+    { num: 3, label: tr('step3') },
+  ] as const;
+
+  return (
+    <div className="flex items-center justify-center gap-0 max-w-lg mx-auto">
+      {steps.map((step, idx) => {
+        const isDone = currentStep > step.num;
+        const isActive = currentStep === step.num;
+        return (
+          <React.Fragment key={step.num}>
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-300 ${
+                  isDone
+                    ? "bg-amber-500 border-amber-500 text-white"
+                    : isActive
+                    ? "bg-white border-amber-500 text-amber-600 shadow-sm shadow-amber-100"
+                    : "bg-stone-100 border-stone-200 text-stone-400"
+                }`}
+              >
+                {isDone ? (
+                  <CheckCircle2 className="w-4 h-4 fill-white text-white" />
+                ) : (
+                  step.num
+                )}
+              </div>
+              <span
+                className={`text-[10px] font-semibold tracking-wide whitespace-nowrap transition-colors ${
+                  isActive ? "text-amber-700" : isDone ? "text-amber-500" : "text-stone-400"
+                }`}
+              >
+                {step.label}
+              </span>
+            </div>
+            {idx < steps.length - 1 && (
+              <div
+                className={`h-0.5 w-10 sm:w-16 mb-5 mx-1 rounded-full transition-all duration-500 ${
+                  currentStep > step.num ? "bg-amber-400" : "bg-stone-200"
+                }`}
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Home() {
+  const { tr } = useLanguage();
   const [data, setData] = useState<InvitationData>(INITIAL_INVITATION_DATA);
   const [excelData, setExcelData] = useState<{ name: string; phone: string }[] | null>(null);
   const [excelFileName, setExcelFileName] = useState<string>("");
@@ -79,28 +137,33 @@ export default function Home() {
     }
   };
 
+  // Determine current step
+  const hasFormData = !!(data.wafadhili || data.jinaLaKijana);
+  const hasContacts = !!(excelData && excelData.length > 0);
+  const currentStep: 1 | 2 | 3 = hasContacts || hasFormData ? (hasContacts ? 3 : 2) : 1;
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAF9F5]">
+    <div className="min-h-screen flex flex-col bg-ui-bg">
       {/* Premium Header */}
-      <header className="bg-white border-b border-stone-100 py-4 px-6 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      <header className="bg-ui-card border-b border-ui-border py-4 px-6 sticky top-0 z-30 shadow-xs">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 shrink-0">
             <div className="bg-amber-500 p-2 rounded-xl text-white">
               <Heart className="w-5 h-5 fill-white" />
             </div>
             <div>
-              <h1 className="text-lg font-serif font-black tracking-wide text-stone-800 flex items-center gap-1.5">
+              <h1 className="text-lg font-serif font-black tracking-wide text-ui-text flex items-center gap-1.5">
                 NorZah Designs
               </h1>
-              <p className="text-[10px] text-stone-400 font-semibold tracking-wider uppercase -mt-0.5">
-                Mtengenezaji wa Kadi za Harusi
+              <p className="text-[10px] text-ui-muted font-semibold tracking-wider uppercase -mt-0.5">
+                {tr('tagline')}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 px-3.5 py-1.5 rounded-full font-semibold">
-            <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-spin-slow" />
-            <span>Toleo la Kifahari (Swahili)</span>
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            <ThemeSwitcher />
+            <LanguageSwitcher />
           </div>
         </div>
       </header>
@@ -108,29 +171,34 @@ export default function Home() {
       {/* Main Dashboard Layout */}
       <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-8 space-y-6">
         
+        {/* Step Indicator */}
+        <div className="bg-ui-card border border-ui-border rounded-2xl px-4 py-4 shadow-xs">
+          <StepIndicator currentStep={currentStep} />
+        </div>
+
         {/* Card Type Selector Tabs */}
-        <div className="flex bg-stone-100 p-1.5 rounded-2xl max-w-md mx-auto shadow-xs border border-stone-200/30">
+        <div className="flex bg-ui-bg p-1.5 rounded-2xl max-w-md mx-auto shadow-xs border border-ui-border">
           <button
             onClick={() => handleCardTypeChange("invitation")}
             className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer ${
               data.cardType !== "contribution"
-                ? "bg-white text-stone-900 shadow-sm"
-                : "text-stone-500 hover:text-stone-800"
+                ? "bg-ui-card text-ui-text shadow-sm"
+                : "text-ui-muted hover:text-ui-text"
             }`}
           >
-            <Heart className={`w-4 h-4 ${data.cardType !== "contribution" ? "text-amber-500 fill-amber-500" : "text-stone-400"}`} />
-            Kadi ya Mwaliko
+            <Heart className={`w-4 h-4 ${data.cardType !== "contribution" ? "text-amber-500 fill-amber-500" : "text-ui-muted"}`} />
+            {tr('cardTypeInvitation')}
           </button>
           <button
             onClick={() => handleCardTypeChange("contribution")}
             className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer ${
               data.cardType === "contribution"
-                ? "bg-white text-stone-900 shadow-sm"
-                : "text-stone-500 hover:text-stone-800"
+                ? "bg-ui-card text-ui-text shadow-sm"
+                : "text-ui-muted hover:text-ui-text"
             }`}
           >
-            <Sparkles className={`w-4 h-4 ${data.cardType === "contribution" ? "text-amber-500" : "text-stone-400"}`} />
-            Kadi ya Mchango
+            <Sparkles className={`w-4 h-4 ${data.cardType === "contribution" ? "text-amber-500" : "text-ui-muted"}`} />
+            {tr('cardTypeContribution')}
           </button>
         </div>
 
@@ -150,7 +218,7 @@ export default function Home() {
 
           {/* RIGHT COLUMN: Sticky Live Preview + Export Panel (Takes 7 cols on lg) */}
           <div className="lg:col-span-7 w-full lg:sticky lg:top-[90px] space-y-6 max-h-[85vh] lg:overflow-y-auto pr-1">
-            
+
             {/* Live Preview Label Banner */}
             <div className="bg-amber-50/70 border border-amber-200/40 rounded-xl px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -159,17 +227,17 @@ export default function Home() {
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
                 </span>
                 <span className="text-xs font-semibold text-amber-900">
-                  Uhakiki wa Moja kwa Moja (Live Preview Card)
+                  {tr('previewTitle')}
                 </span>
               </div>
-              <div className="text-[11px] text-stone-500 flex items-center gap-1">
+              <div className="text-[11px] text-ui-muted flex items-center gap-1">
                 <HelpCircle className="w-3.5 h-3.5" />
-                <span>Inavyoonekana hapa ndivyo itakavyopakuliwa</span>
+                <span>{tr('previewHint')}</span>
               </div>
             </div>
 
             {/* Card Live Render Component */}
-            <div className="bg-stone-50 rounded-2xl border border-stone-200/40 shadow-inner flex items-center justify-center p-4 min-h-[500px] w-full">
+            <div className="bg-ui-bg rounded-2xl border border-ui-border shadow-inner flex items-center justify-center p-4 min-h-125 w-full">
               <InvitationPreview data={data} cardRef={cardRef} />
             </div>
 
@@ -186,23 +254,23 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-stone-100 py-6 text-center text-xs text-stone-400 font-medium">
+      <footer className="bg-ui-card border-t border-ui-border py-6 text-center text-xs text-ui-muted font-medium">
         <div className="max-w-7xl mx-auto px-6 space-y-1">
           <p className="flex items-center justify-center gap-1">
-            Imetengenezwa kwa <Heart className="w-3.5 h-3.5 text-amber-500 fill-amber-500" /> kwa ajili ya Maharusi wa Kitanzania.
+            {tr('footerMadeWith')} <Heart className="w-3.5 h-3.5 text-amber-500 fill-amber-500 mx-0.5" /> {tr('footerFor')}
           </p>
           <p>
-            Imesanifiwa na kuundwa na {" "}
-            <a 
-              href="https://norman-kita.vercel.app/" 
-              target="_blank" 
-              rel="noopener noreferrer" 
+            {tr('footerDesigned')}{" "}
+            <a
+              href="https://norman-kita.vercel.app/"
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-amber-600 hover:text-amber-700 underline font-semibold transition-all"
             >
               Norman Kita (NorZah)
             </a>.
           </p>
-          <p>Hakimiliki &copy; {new Date().getFullYear()} NorZah. Haki zote zimehifadhiwa.</p>
+          <p>{tr('footerCopyright', { year: new Date().getFullYear() })}</p>
         </div>
       </footer>
     </div>

@@ -1,9 +1,59 @@
 @import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 @import "tailwindcss";
 
-:root {
+/* ─── UI theme tokens (light is default) ─── */
+:root,
+[data-theme="light"] {
   --background: #FDFCF7;
   --foreground: #1c1917;
+  --ui-bg: #FDFCF7;
+  --ui-card: #ffffff;
+  --ui-text: #1c1917;
+  --ui-muted: #78716c;
+  --ui-border: #e7e5e4;
+  --ui-accent: #b58622;
+}
+
+[data-theme="dark"] {
+  --background: #0f0f18;
+  --foreground: #e8e6e0;
+  --ui-bg: #0f0f18;
+  --ui-card: #1e1e2e;
+  --ui-text: #e8e6e0;
+  --ui-muted: #a39fa0;
+  --ui-border: #2e2e3e;
+  --ui-accent: #d4a843;
+}
+
+[data-theme="gold"] {
+  --background: #fdf6e3;
+  --foreground: #3b2a0e;
+  --ui-bg: #fdf6e3;
+  --ui-card: #fffbf0;
+  --ui-text: #3b2a0e;
+  --ui-muted: #8a6d3b;
+  --ui-border: #e8d5a3;
+  --ui-accent: #b8860b;
+}
+
+[data-theme="forest"] {
+  --background: #f0f7f0;
+  --foreground: #1a2e1a;
+  --ui-bg: #f0f7f0;
+  --ui-card: #ffffff;
+  --ui-text: #1a2e1a;
+  --ui-muted: #4a6741;
+  --ui-border: #c5ddc1;
+  --ui-accent: #2d5a27;
+}
+
+@theme inline {
+  --color-ui-bg: var(--ui-bg);
+  --color-ui-card: var(--ui-card);
+  --color-ui-text: var(--ui-text);
+  --color-ui-muted: var(--ui-muted);
+  --color-ui-border: var(--ui-border);
+  --color-ui-accent: var(--ui-accent);
 }
 
 @theme {
@@ -27,8 +77,8 @@
 }
 
 body {
-  background-color: var(--background);
-  color: var(--foreground);
+  background-color: var(--ui-bg);
+  color: var(--ui-text);
 }
 
 /* Premium scrollbar styling */
@@ -56,4 +106,59 @@ body {
 
 .animate-shimmer {
   animation: shimmer 1.5s infinite;
+}
+
+/* Modal entrance animation */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-fade-slide-in {
+  animation: fadeSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Progress bar pulse shimmer */
+@keyframes progressPulse {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.animate-progress-pulse {
+  background: linear-gradient(
+    90deg,
+    #16a34a 0%,
+    #22c55e 40%,
+    #4ade80 50%,
+    #22c55e 60%,
+    #16a34a 100%
+  );
+  background-size: 200% auto;
+  animation: progressPulse 1.8s linear infinite;
+}
+
+/* Toast notification */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-toast-in {
+  animation: toastIn 0.2s ease-out forwards;
+}
+
+/* Spin slow for decorative icons */
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
 }
