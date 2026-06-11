@@ -40,7 +40,7 @@ import {
   PageOrientation,
 } from "docx";
 import * as XLSX from "xlsx";
-import { InvitationData } from "../types";
+import { InvitationData, ExcelContact } from "../types";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
@@ -49,7 +49,7 @@ const SECONDS_PER_MSG = 4;
 interface ActionButtonsProps {
   data: InvitationData;
   cardRef: React.RefObject<HTMLDivElement | null>;
-  excelData: { name: string; phone: string }[] | null;
+  excelData: ExcelContact[] | null;
   onUpdateData: React.Dispatch<React.SetStateAction<InvitationData>>;
 }
 
@@ -194,7 +194,6 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
 
   // ── SMS composer state ─────────────────────────────────────────────────────
   const [smsComposerOpen, setSmsComposerOpen] = useState(false);
-  const [smsComposerTab, setSmsComposerTab] = useState<"single" | "bulk">("single");
   const [smsSinglePhone, setSmsSinglePhone] = useState("");
   const [smsSingleMessage, setSmsSingleMessage] = useState("");
   const [smsSinglePhoneError, setSmsSinglePhoneError] = useState("");
@@ -213,6 +212,7 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
   const [smsMessageStyle, setSmsMessageStyle] = useState<SmsStyle>('short');
   const [smsFallbackMessageStyle, setSmsFallbackMessageStyle] = useState<SmsStyle>('short');
   const [smsDisclaimerOpen, setSmsDisclaimerOpen] = useState(false);
+  const [smsMessageEdited, setSmsMessageEdited] = useState(false);
 
   // ── Poll WhatsApp status ──────────────────────────────────────────────────
   const checkStatus = useCallback(async () => {
@@ -426,6 +426,21 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
 
   useEffect(() => () => stopPolling(), []);
 
+  // Auto-fill both SMS messages on data/style/language change unless user has manually edited.
+  // smsMessageEdited is intentionally excluded from deps — auto-fill should only fire on real data changes.
+  useEffect(() => {
+    if (smsMessageEdited) return;
+    const template = buildSmsTemplate(smsMessageStyle, language, data.cardType ?? 'invitation', data);
+    setSmsBulkMessage(template);
+    setSmsSingleMessage(template);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, smsMessageStyle, language]);
+
+  // Reset edited flag when contacts load or clear so auto-fill kicks in again
+  useEffect(() => {
+    setSmsMessageEdited(false);
+  }, [excelData]);
+
   // ── Download failed contacts as Excel ────────────────────────────────────
   const downloadFailedContacts = () => {
     if (!failures.length) return;
@@ -491,7 +506,11 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
       const res = await fetch("/api/sms/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contacts: excelData, message: smsBulkMessage, cardType: data.cardType }),
+        body: JSON.stringify({
+          contacts: excelData.map(c => ({ name: c.originalName || c.name, phone: c.phone })),
+          message: smsBulkMessage,
+          cardType: data.cardType,
+        }),
       });
       const result = await res.json();
       setSmsBulkResult({ sent: result.sent ?? 0, failed: result.failed ?? 0, done: true });
@@ -832,6 +851,11 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
 
   const smsSenderId = data.cardType === 'contribution' ? 'MICHANGO' : 'HARUSI';
 
+  const handleSmsStyleChange = (style: SmsStyle) => {
+    setSmsMessageStyle(style);
+    setSmsMessageEdited(false);
+  };
+
   const isBatchMode = excelData && excelData.length > 0 && !data.jinaLaMwalikwa.trim();
   const estimatedRemaining = sendingProgress
     ? formatTime(Math.max(0, (sendingProgress.total - sendingProgress.sent) * SECONDS_PER_MSG))
@@ -950,7 +974,6 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
 
       {/* ═══════════════════════════════════════════════════
           SMS DIRECT SEND SECTION
-          Always visible — independent of WhatsApp/Excel
       ═══════════════════════════════════════════════════ */}
       <div className="border-t border-ui-border pt-5 space-y-3">
         <button
@@ -969,9 +992,10 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
         </button>
 
         {smsComposerOpen && (() => {
-          const previewText = buildSmsTemplate(smsMessageStyle, language, data.cardType ?? 'invitation', data);
-          const previewStats = getSmsStats(previewText.length);
           const bulkCount = excelData?.length ?? 0;
+          const uniquePeople = excelData
+            ? new Set(excelData.map(c => c.originalName || c.name)).size
+            : 0;
           const costPerSms = smsMessageStyle === 'short' ? 16 : 32;
 
           const styleLabels = {
@@ -987,15 +1011,11 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                   type="button"
                   onClick={() => onChange(style)}
                   className={`text-left p-2.5 rounded-xl border-2 transition-all cursor-pointer ${
-                    value === style
-                      ? 'border-amber-500 bg-amber-50'
-                      : 'border-ui-border bg-ui-card hover:border-amber-200'
+                    value === style ? 'border-amber-500 bg-amber-50' : 'border-ui-border bg-ui-card hover:border-amber-200'
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <div className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                      value === style ? 'border-amber-500' : 'border-ui-muted'
-                    }`}>
+                    <div className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center ${value === style ? 'border-amber-500' : 'border-ui-muted'}`}>
                       {value === style && <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
                     </div>
                     <span className={`text-[11px] font-bold ${value === style ? 'text-amber-800' : 'text-ui-text'}`}>
@@ -1008,174 +1028,67 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
             </div>
           );
 
+          const handleResetMessage = () => {
+            const template = buildSmsTemplate(smsMessageStyle, language, data.cardType ?? 'invitation', data);
+            setSmsBulkMessage(template);
+            setSmsSingleMessage(template);
+            setSmsMessageEdited(false);
+          };
+
+          const resetLink = smsMessageEdited ? (
+            <button
+              type="button"
+              onClick={handleResetMessage}
+              className="text-[11px] text-amber-600 hover:text-amber-700 transition-colors cursor-pointer shrink-0"
+            >
+              ↺ {language === 'en' ? 'Reset to default' : 'Rejesha ujumbe wa awali'}
+            </button>
+          ) : null;
+
+          const countLabel = uniquePeople !== bulkCount
+            ? (language === 'en'
+                ? `${uniquePeople} people (${bulkCount} phone numbers) loaded`
+                : `Watu ${uniquePeople} (namba ${bulkCount} za simu) wameandikwa`)
+            : tr('smsBulkCount', { count: bulkCount });
+
           return (
             <div className="space-y-4 pt-1">
-              {/* Tab switcher */}
-              <div className="flex border-b border-ui-border">
-                <button
-                  type="button"
-                  onClick={() => setSmsComposerTab("single")}
-                  className={`px-4 py-2 text-xs font-semibold border-b-2 transition-all -mb-px cursor-pointer ${
-                    smsComposerTab === "single"
-                      ? "border-amber-600 text-amber-700"
-                      : "border-transparent text-ui-muted hover:text-ui-text"
-                  }`}
-                >
-                  {tr('smsSingle')}
-                </button>
-                {hasBulkContacts && (
-                  <button
-                    type="button"
-                    onClick={() => setSmsComposerTab("bulk")}
-                    className={`px-4 py-2 text-xs font-semibold border-b-2 transition-all -mb-px cursor-pointer ${
-                      smsComposerTab === "bulk"
-                        ? "border-amber-600 text-amber-700"
-                        : "border-transparent text-ui-muted hover:text-ui-text"
-                    }`}
-                  >
-                    {tr('smsBulk', { count: bulkCount })}
-                  </button>
-                )}
-              </div>
+              {renderStylePicker(smsMessageStyle, handleSmsStyleChange)}
 
-              {/* Style selector — shared between tabs */}
-              {renderStylePicker(smsMessageStyle, setSmsMessageStyle)}
-
-              {/* Live preview */}
-              <div className="rounded-xl border border-ui-border overflow-hidden">
-                <div className="bg-ui-bg px-3 py-2 border-b border-ui-border">
-                  <p className="text-[10px] text-ui-muted font-bold uppercase tracking-wider">
-                    {language === 'en' ? 'Message Preview' : 'Mfano wa Ujumbe'}
-                  </p>
-                </div>
-                <div className="p-3 bg-ui-card">
-                  <p className="text-xs text-ui-text whitespace-pre-wrap font-mono leading-relaxed">
-                    {previewText}
-                  </p>
-                </div>
-                <div className="px-3 py-2 bg-ui-bg border-t border-ui-border flex items-center justify-between flex-wrap gap-1">
-                  <span className="text-[10px] text-ui-muted">
-                    {language === 'en' ? `TZS ${costPerSms}/SMS` : `TZS ${costPerSms} kwa SMS`}
-                    {smsComposerTab === 'bulk' && hasBulkContacts && (
-                      <> · <span className="font-semibold text-amber-700">≈ TZS {(bulkCount * costPerSms).toLocaleString()} {language === 'en' ? 'total' : 'jumla'}</span></>
-                    )}
-                  </span>
-                  <span className={`text-[10px] font-bold font-mono ${previewStats.colorClass}`}>
-                    {previewStats.icon} {previewStats.label} — {previewStats.smsLabel}
-                  </span>
-                </div>
-              </div>
-
-              {/* ── MODE A: Single SMS ── */}
-              {smsComposerTab === "single" && (
-                <div className="space-y-3">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={smsSinglePhone}
-                      onChange={e => { setSmsSinglePhone(e.target.value); if (smsSinglePhoneError) setSmsSinglePhoneError(""); }}
-                      placeholder={tr('smsPhonePlaceholder')}
-                      className="w-full text-xs px-3.5 py-3 rounded-xl border border-ui-border bg-ui-card text-ui-text focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all pl-9"
-                    />
-                    <Smartphone className="absolute left-3 top-3.5 w-3.5 h-3.5 text-ui-muted" />
-                  </div>
-                  {smsSinglePhoneError && (
-                    <p className="text-red-500 text-xs flex items-center gap-1 animate-toast-in">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      {smsSinglePhoneError}
-                    </p>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setSmsSingleMessage(buildSmsTemplate(smsMessageStyle, language, data.cardType ?? 'invitation', data))}
-                    className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition-all cursor-pointer"
-                  >
-                    {tr('fillTemplate')}
-                  </button>
-
-                  <div className="space-y-1">
-                    <textarea
-                      rows={4}
-                      value={smsSingleMessage}
-                      onChange={e => setSmsSingleMessage(e.target.value.slice(0, 480))}
-                      placeholder={tr('smsMessagePlaceholder')}
-                      className="w-full text-xs px-3.5 py-3 rounded-xl border border-ui-border bg-ui-card text-ui-text focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all resize-none"
-                    />
-                    {(() => {
-                      const s = getSmsStats(smsSingleMessage.length);
-                      return (
-                        <p className={`text-[10px] text-right font-mono font-bold ${s.colorClass}`}>
-                          {s.icon} {s.label} — {s.smsLabel}
-                        </p>
-                      );
-                    })()}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleSingleSMSSend}
-                    disabled={smsSingleSending || !smsSingleMessage.trim()}
-                    className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs transition-all shadow-sm active:scale-[0.98] cursor-pointer"
-                  >
-                    {smsSingleSending ? (
-                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {tr('smsSending')}</>
-                    ) : (
-                      <><Send className="w-3.5 h-3.5 rotate-45" /> {tr('smsSend')}</>
-                    )}
-                  </button>
-
-                  {smsSingleResult === "success" && (
-                    <p className="text-emerald-600 text-xs font-semibold flex items-center gap-1.5 animate-toast-in">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      {tr('smsSentOk')}
-                    </p>
-                  )}
-                  {smsSingleResult === "error" && (
-                    <p className="text-red-500 text-xs flex items-center gap-1.5 animate-toast-in">
-                      <XCircle className="w-3.5 h-3.5" />
-                      {tr('smsSendFailed')}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* ── MODE B: Bulk SMS ── */}
-              {smsComposerTab === "bulk" && hasBulkContacts && (
+              {/* ── BULK MODE (when contacts loaded) ── */}
+              {hasBulkContacts ? (
                 <div className="space-y-3">
                   <p className="text-xs text-ui-text bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
-                    {tr('smsBulkCount', { count: bulkCount })}
+                    {countLabel}
                   </p>
-
-                  <button
-                    type="button"
-                    onClick={() => setSmsBulkMessage(buildSmsTemplate(smsMessageStyle, language, data.cardType ?? 'invitation', data))}
-                    className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition-all cursor-pointer"
-                  >
-                    {tr('fillTemplate')}
-                  </button>
 
                   <div className="space-y-1">
                     <textarea
-                      rows={4}
+                      rows={6}
                       value={smsBulkMessage}
-                      onChange={e => setSmsBulkMessage(e.target.value.slice(0, 480))}
+                      onChange={e => { setSmsBulkMessage(e.target.value.slice(0, 480)); setSmsMessageEdited(true); }}
                       placeholder={tr('smsBulkMessagePlaceholder')}
-                      className="w-full text-xs px-3.5 py-3 rounded-xl border border-ui-border bg-ui-card text-ui-text focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all resize-none"
+                      className="w-full text-sm px-3.5 py-3 rounded-xl border border-stone-200 bg-white text-ui-text focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all resize-y"
                     />
-                    <div className="flex justify-between items-center">
-                      <p className="text-[10px] text-ui-muted italic">
-                        {tr('smsNameHelper')} <code className="bg-ui-bg px-1 rounded text-[9px]">{"{{name}}"}</code>
-                      </p>
+                    <div className="flex justify-between items-center flex-wrap gap-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-[10px] text-ui-muted italic">
+                          {tr('smsNameHelper')} <code className="bg-ui-bg px-1 rounded text-[9px]">{"{{name}}"}</code>
+                        </p>
+                        {resetLink}
+                      </div>
                       {(() => {
                         const s = getSmsStats(smsBulkMessage.length);
-                        return (
-                          <p className={`text-[10px] font-mono font-bold shrink-0 ml-2 ${s.colorClass}`}>
-                            {s.icon} {s.label} — {s.smsLabel}
-                          </p>
-                        );
+                        return <p className={`text-[10px] font-mono font-bold shrink-0 ${s.colorClass}`}>{s.icon} {s.label} — {s.smsLabel}</p>;
                       })()}
                     </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-ui-muted flex-wrap gap-1">
+                    <span>{language === 'en' ? `TZS ${costPerSms}/SMS` : `TZS ${costPerSms} kwa SMS`}</span>
+                    <span className="font-semibold text-amber-700">
+                      ≈ TZS {(bulkCount * costPerSms).toLocaleString()} {language === 'en' ? 'total' : 'jumla'}
+                    </span>
                   </div>
 
                   <button
@@ -1206,9 +1119,98 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                     </div>
                   )}
                 </div>
+              ) : (
+                /* ── SINGLE MODE (no contacts loaded) ── */
+                <div className="space-y-3">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={smsSinglePhone}
+                      onChange={e => { setSmsSinglePhone(e.target.value); if (smsSinglePhoneError) setSmsSinglePhoneError(""); }}
+                      placeholder={tr('smsPhonePlaceholder')}
+                      className="w-full text-xs px-3.5 py-3 rounded-xl border border-ui-border bg-ui-card text-ui-text focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all pl-9"
+                    />
+                    <Smartphone className="absolute left-3 top-3.5 w-3.5 h-3.5 text-ui-muted" />
+                  </div>
+                  {smsSinglePhoneError && (
+                    <p className="text-red-500 text-xs flex items-center gap-1 animate-toast-in">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      {smsSinglePhoneError}
+                    </p>
+                  )}
+
+                  <div className="space-y-1">
+                    <textarea
+                      rows={6}
+                      value={smsSingleMessage}
+                      onChange={e => { setSmsSingleMessage(e.target.value.slice(0, 480)); setSmsMessageEdited(true); }}
+                      placeholder={tr('smsMessagePlaceholder')}
+                      className="w-full text-sm px-3.5 py-3 rounded-xl border border-stone-200 bg-white text-ui-text focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all resize-y"
+                    />
+                    <div className="flex justify-between items-center flex-wrap gap-1">
+                      {resetLink}
+                      {(() => {
+                        const s = getSmsStats(smsSingleMessage.length);
+                        return <p className={`text-[10px] font-mono font-bold ml-auto ${s.colorClass}`}>{s.icon} {s.label} — {s.smsLabel}</p>;
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Quick-load buttons */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tpl = buildSmsTemplate(smsMessageStyle, language, 'invitation', data);
+                        setSmsSingleMessage(tpl);
+                        setSmsMessageEdited(false);
+                      }}
+                      className="flex-1 text-[11px] font-semibold px-3 py-2 rounded-xl bg-ui-bg border border-ui-border text-ui-text hover:border-amber-300 hover:bg-amber-50 transition-all cursor-pointer"
+                    >
+                      🌸 {language === 'en' ? 'Load Invitation' : 'Pakia Mwaliko'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tpl = buildSmsTemplate(smsMessageStyle, language, 'contribution', data);
+                        setSmsSingleMessage(tpl);
+                        setSmsMessageEdited(false);
+                      }}
+                      className="flex-1 text-[11px] font-semibold px-3 py-2 rounded-xl bg-ui-bg border border-ui-border text-ui-text hover:border-amber-300 hover:bg-amber-50 transition-all cursor-pointer"
+                    >
+                      💰 {language === 'en' ? 'Load Contribution' : 'Pakia Mchango'}
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSingleSMSSend}
+                    disabled={smsSingleSending || !smsSingleMessage.trim()}
+                    className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs transition-all shadow-sm active:scale-[0.98] cursor-pointer"
+                  >
+                    {smsSingleSending ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {tr('smsSending')}</>
+                    ) : (
+                      <><Send className="w-3.5 h-3.5 rotate-45" /> {tr('smsSend')}</>
+                    )}
+                  </button>
+
+                  {smsSingleResult === "success" && (
+                    <p className="text-emerald-600 text-xs font-semibold flex items-center gap-1.5 animate-toast-in">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {tr('smsSentOk')}
+                    </p>
+                  )}
+                  {smsSingleResult === "error" && (
+                    <p className="text-red-500 text-xs flex items-center gap-1.5 animate-toast-in">
+                      <XCircle className="w-3.5 h-3.5" />
+                      {tr('smsSendFailed')}
+                    </p>
+                  )}
+                </div>
               )}
 
-              {/* Disclaimer — once, at bottom of composer */}
+              {/* Disclaimer */}
               <div className="rounded-xl border border-ui-border overflow-hidden">
                 <button
                   type="button"

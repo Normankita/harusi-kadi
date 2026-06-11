@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { Heart, Sparkles, HelpCircle, CheckCircle2 } from "lucide-react";
-import { InvitationData } from "../types";
+import { Heart, Sparkles, HelpCircle, CheckCircle2, Trash2 } from "lucide-react";
+import { InvitationData, ExcelContact } from "../types";
 import InvitationForm from "../components/InvitationForm";
 import InvitationPreview from "../components/InvitationPreview";
 import ActionButtons from "../components/ActionButtons";
 import LanguageSwitcher from "../components/ui/LanguageSwitcher";
 import ThemeSwitcher from "../components/ui/ThemeSwitcher";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
+import { useFormPersistence } from "../lib/useFormPersistence";
 
 const INITIAL_INVITATION_DATA: InvitationData = {
   cardType: "invitation",
@@ -111,29 +112,41 @@ function StepIndicator({ currentStep }: { currentStep: 1 | 2 | 3 }) {
 }
 
 export default function Home() {
-  const { tr } = useLanguage();
+  const { language, tr } = useLanguage();
   const [data, setData] = useState<InvitationData>(INITIAL_INVITATION_DATA);
-  const [excelData, setExcelData] = useState<{ name: string; phone: string }[] | null>(null);
+  const [hasUserEdited, setHasUserEdited] = useState(false);
+  const [excelData, setExcelData] = useState<ExcelContact[] | null>(null);
   const [excelFileName, setExcelFileName] = useState<string>("");
-  const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
   const cardRef = useRef<HTMLDivElement | null>(null);
 
-  React.useEffect(() => {
-    if (data.mtindoWaMapambo === "gold-leaf-full") {
-      setOrientation("landscape");
-    } else {
-      setOrientation("portrait");
-    }
-  }, [data.mtindoWaMapambo]);
+  const { clearSavedData, hasSaved } = useFormPersistence(data, setData);
+
+  const handleFormChange = (newData: InvitationData) => {
+    setData(newData);
+    setHasUserEdited(true);
+  };
 
   const handleCardTypeChange = (type: "invitation" | "contribution") => {
-    // Reset data and excel details when switching modes
     setExcelData(null);
     setExcelFileName("");
+    setHasUserEdited(false);
     if (type === "invitation") {
       setData(INITIAL_INVITATION_DATA);
     } else {
       setData(INITIAL_CONTRIBUTION_DATA);
+    }
+  };
+
+  const handleClearForm = () => {
+    const message = language === 'en'
+      ? 'Are you sure? All form data will be cleared.'
+      : 'Una uhakika? Data yote itafutwa.';
+    if (window.confirm(message)) {
+      clearSavedData();
+      setData(data.cardType === 'contribution' ? INITIAL_CONTRIBUTION_DATA : INITIAL_INVITATION_DATA);
+      setExcelData(null);
+      setExcelFileName("");
+      setHasUserEdited(false);
     }
   };
 
@@ -169,7 +182,7 @@ export default function Home() {
       </header>
 
       {/* Main Dashboard Layout */}
-      <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-8 space-y-6">
+      <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-8 space-y-6 xl:space-y-8">
         
         {/* Step Indicator */}
         <div className="bg-ui-card border border-ui-border rounded-2xl px-4 py-4 shadow-xs">
@@ -177,7 +190,7 @@ export default function Home() {
         </div>
 
         {/* Card Type Selector Tabs */}
-        <div className="flex bg-ui-bg p-1.5 rounded-2xl max-w-md mx-auto shadow-xs border border-ui-border">
+        <div className="flex bg-ui-bg p-1.5 rounded-2xl max-w-lg mx-auto shadow-xs border border-ui-border">
           <button
             onClick={() => handleCardTypeChange("invitation")}
             className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer ${
@@ -202,13 +215,29 @@ export default function Home() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-start">
+        {/* Saved indicator + Clear Form row */}
+        <div className="flex items-center justify-between max-w-lg mx-auto px-1">
+          <span className={`text-xs text-stone-400 flex items-center gap-1 transition-opacity duration-300 ${hasSaved && hasUserEdited ? 'opacity-100' : 'opacity-0'}`}>
+            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+            {language === 'en' ? 'Auto-saved ✓' : 'Imehifadhiwa ✓'}
+          </span>
+          <button
+            type="button"
+            onClick={handleClearForm}
+            className="flex items-center gap-1 text-xs text-stone-400 hover:text-red-500 transition-colors py-1 px-2 rounded-lg hover:bg-red-50 cursor-pointer"
+          >
+            <Trash2 className="w-3 h-3" />
+            {language === 'en' ? 'Clear Form' : 'Anza Upya'}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 xl:gap-10 items-start">
           
           {/* LEFT COLUMN: Input Form (Takes 5 cols on lg) */}
           <div className="lg:col-span-5 w-full">
-            <InvitationForm 
-              data={data} 
-              onChange={setData} 
+            <InvitationForm
+              data={data}
+              onChange={handleFormChange}
               excelData={excelData}
               setExcelData={setExcelData}
               excelFileName={excelFileName}
@@ -217,7 +246,7 @@ export default function Home() {
           </div>
 
           {/* RIGHT COLUMN: Sticky Live Preview + Export Panel (Takes 7 cols on lg) */}
-          <div className="lg:col-span-7 w-full lg:sticky lg:top-[90px] space-y-6 max-h-[85vh] lg:overflow-y-auto pr-1">
+          <div className="lg:col-span-7 w-full lg:sticky lg:top-[90px] space-y-6 max-h-[85vh] xl:max-h-[90vh] lg:overflow-y-auto pr-1">
 
             {/* Live Preview Label Banner */}
             <div className="bg-amber-50/70 border border-amber-200/40 rounded-xl px-4 py-3 flex items-center justify-between">
@@ -237,7 +266,7 @@ export default function Home() {
             </div>
 
             {/* Card Live Render Component */}
-            <div className="bg-ui-bg rounded-2xl border border-ui-border shadow-inner flex items-center justify-center p-4 min-h-125 w-full">
+            <div className="bg-ui-bg rounded-2xl border border-ui-border shadow-inner flex items-center justify-center p-4 xl:p-6 min-h-125 xl:min-h-[36rem] w-full">
               <InvitationPreview data={data} cardRef={cardRef} />
             </div>
 

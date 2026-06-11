@@ -22,14 +22,14 @@ import {
   UserPlus
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { InvitationData, CommitteeMember } from "../types";
+import { InvitationData, CommitteeMember, ExcelContact } from "../types";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 interface InvitationFormProps {
   data: InvitationData;
   onChange: (newData: InvitationData) => void;
-  excelData: { name: string; phone: string }[] | null;
-  setExcelData: (data: { name: string; phone: string }[] | null) => void;
+  excelData: ExcelContact[] | null;
+  setExcelData: (data: ExcelContact[] | null) => void;
   excelFileName: string;
   setExcelFileName: (name: string) => void;
 }
@@ -58,6 +58,55 @@ interface ContactRow {
   id: string;
   name: string;
   phone: string;
+  originalName?: string;
+}
+
+function parsePhoneNumbers(raw: string): string[] {
+  if (!raw) return [];
+  const str = raw.toString().trim();
+  if (!str) return [];
+
+  // Unambiguous separators — split on them
+  if (/[,/\\;|]/.test(str)) {
+    return str
+      .split(/[,/\\;|]+/)
+      .map(p => p.replace(/\s+/g, '').trim())
+      .filter(p => p.length >= 9);
+  }
+
+  // No separators — strip spaces and check if it looks like one number
+  const stripped = str.replace(/\s+/g, '');
+  if (/^\+?\d{9,13}$/.test(stripped)) {
+    return [stripped];
+  }
+
+  // Multiple numbers separated only by spaces — merge token groups
+  const tokens = str.trim().split(/\s+/);
+  const numbers: string[] = [];
+  let current = '';
+
+  for (const token of tokens) {
+    const cleaned = token.replace(/\D/g, '');
+    if (!cleaned) continue;
+    if (current === '') {
+      current = cleaned;
+    } else if (current.length >= 9 && current.length <= 13) {
+      numbers.push(current);
+      current = cleaned;
+    } else {
+      current = current + cleaned;
+    }
+  }
+  if (current && current.length >= 9) numbers.push(current);
+
+  return numbers.length > 0 ? numbers : stripped.length >= 9 ? [stripped] : [];
+}
+
+function normalizeParsedPhone(phone: string): string {
+  const cleaned = phone.replace(/[^\d]/g, '');
+  if (cleaned.startsWith('0') && cleaned.length === 10) return '255' + cleaned.substring(1);
+  if (cleaned.length === 9 && !cleaned.startsWith('255')) return '255' + cleaned;
+  return cleaned;
 }
 
 export default function InvitationForm({
@@ -68,7 +117,7 @@ export default function InvitationForm({
   excelFileName,
   setExcelFileName
 }: InvitationFormProps) {
-  const { tr } = useLanguage();
+  const { language, tr } = useLanguage();
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ name: string; phone: string }>({ name: "", phone: "" });
@@ -92,7 +141,7 @@ export default function InvitationForm({
   }, [excelData]);
 
   const syncToParent = (updated: ContactRow[]) => {
-    setExcelData(updated.map(c => ({ name: c.name, phone: c.phone })));
+    setExcelData(updated.map(c => ({ name: c.name, phone: c.phone, originalName: c.originalName })));
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -162,11 +211,31 @@ export default function InvitationForm({
           const row = rows[i];
           if (!row || row.length === 0) continue;
           const name = String(row[jinaIndex] || "").trim();
-          const phone = simuIndex !== -1 && row[simuIndex] !== undefined
+          if (!name) continue;
+
+          const phoneRaw = simuIndex !== -1 && row[simuIndex] !== undefined
             ? String(row[simuIndex] || "").trim()
             : "";
-          if (name) {
-            dataRows.push({ id: `row-${i}-${Date.now()}`, name, phone });
+
+          const phones = parsePhoneNumbers(phoneRaw)
+            .map(normalizeParsedPhone)
+            .filter(p => p.length >= 9);
+
+          if (phones.length <= 1) {
+            dataRows.push({
+              id: `row-${i}-${Date.now()}`,
+              name,
+              phone: phones[0] ?? phoneRaw,
+            });
+          } else {
+            phones.forEach((phone, phoneIdx) => {
+              dataRows.push({
+                id: `row-${i}-${phoneIdx}-${Date.now()}`,
+                name: `${name} (${phoneIdx + 1})`,
+                phone,
+                originalName: name,
+              });
+            });
           }
         }
 
@@ -177,7 +246,7 @@ export default function InvitationForm({
         }
 
         setContacts(dataRows);
-        setExcelData(dataRows.map(c => ({ name: c.name, phone: c.phone })));
+        setExcelData(dataRows.map(c => ({ name: c.name, phone: c.phone, originalName: c.originalName })));
       } catch (err) {
         console.error(err);
         setExcelError("Imeshindwa kusoma faili. Hakikisha ni faili la Excel (.xlsx, .xls) au CSV.");
@@ -250,7 +319,7 @@ export default function InvitationForm({
   const hiddenCount = contacts.length - PREVIEW_COUNT;
 
   return (
-    <div className="bg-ui-card rounded-2xl border border-ui-border shadow-sm p-6 md:p-8 space-y-8 max-h-[85vh] overflow-y-auto">
+    <div className="bg-ui-card rounded-2xl border border-ui-border shadow-sm p-6 md:p-8 xl:p-10 space-y-8 max-h-[85vh] overflow-y-auto">
       <div className="border-b border-ui-border pb-4">
         <h2 className="text-2xl font-serif font-bold text-ui-text flex items-center gap-2">
           <Heart className="text-amber-500 fill-amber-500 w-6 h-6 animate-pulse" />
@@ -329,7 +398,7 @@ export default function InvitationForm({
             {tr('sectionGuest')}
           </h3>
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-5">
               {/* Guest name */}
               <div className="space-y-1.5">
                 <label htmlFor="jinaLaMwalikwa" className="text-xs font-semibold text-ui-text flex items-center gap-1.5">
@@ -435,7 +504,16 @@ export default function InvitationForm({
                   <div>
                     <p className="text-xs font-bold text-ui-text">{tr('contactListTitle')}</p>
                     <p className="text-[10px] text-ui-muted mt-0.5">
-                      {tr('guestsInExcel', { count: contacts.length })}
+                      {(() => {
+                        const uniquePeople = new Set(contacts.map(c => c.originalName || c.name)).size;
+                        const totalNums = contacts.length;
+                        if (uniquePeople !== totalNums) {
+                          return language === 'en'
+                            ? `${uniquePeople} people (${totalNums} phone numbers) loaded`
+                            : `Watu ${uniquePeople} (namba ${totalNums} za simu) wameandikwa`;
+                        }
+                        return tr('guestsInExcel', { count: contacts.length });
+                      })()}
                     </p>
                   </div>
                   <button
@@ -592,7 +670,7 @@ export default function InvitationForm({
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-5">
               <div className="space-y-1.5">
                 <label htmlFor="wafadhili" className="text-xs font-semibold text-ui-text flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5 text-ui-muted" />
@@ -634,7 +712,7 @@ export default function InvitationForm({
             {tr('sectionCouple')}
           </h3>
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-5">
               <div className="space-y-1.5">
                 <label htmlFor="jinaLaKijana" className="text-xs font-semibold text-ui-text flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-ui-muted" />
@@ -668,7 +746,7 @@ export default function InvitationForm({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-5">
               <div className="space-y-1.5">
                 <label htmlFor="tareheYaNdoa" className="text-xs font-semibold text-ui-text flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-ui-muted" />
@@ -709,7 +787,7 @@ export default function InvitationForm({
             {tr('sectionPayment')}
           </h3>
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-5">
               <div className="space-y-1.5">
                 <label htmlFor="ainaYaMchango" className="text-xs font-semibold text-ui-text flex items-center gap-1.5">
                   <CreditCard className="w-3.5 h-3.5 text-ui-muted" />
@@ -747,7 +825,7 @@ export default function InvitationForm({
             </div>
 
             {data.cardType === "contribution" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-5">
                 <div className="space-y-1.5">
                   <label htmlFor="ainaYaMchangoPili" className="text-xs font-semibold text-ui-text flex items-center gap-1.5">
                     <CreditCard className="w-3.5 h-3.5 text-ui-muted" />
@@ -785,7 +863,7 @@ export default function InvitationForm({
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:gap-5">
               <div className="space-y-1.5">
                 <label htmlFor="jinaLaAkauntiYaMchango" className="text-xs font-semibold text-ui-text flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-ui-muted" />

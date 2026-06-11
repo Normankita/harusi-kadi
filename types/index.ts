@@ -1,3 +1,9 @@
+export interface ExcelContact {
+  name: string;
+  phone: string;
+  originalName?: string;
+}
+
 export interface CommitteeMember {
   id: string;
   name: string;
