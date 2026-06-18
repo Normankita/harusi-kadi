@@ -10,7 +10,6 @@ import {
   Heart,
   Copy,
   Check,
-  Wifi,
   WifiOff,
   MessageSquare,
   Users,
@@ -318,18 +317,30 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
         if (!cardElement) throw new Error("Card element not found");
 
         const canvas = await html2canvas(cardElement, {
-          scale: 2,
+          scale: 1.5,          // was 2 — lower scale halves canvas memory
           useCORS: true,
           backgroundColor: "#FFFDF9",
           logging: false,
           allowTaint: true,
         });
 
+        // JPEG at 0.8 quality is ~8-10x smaller than PNG — critical for large contact lists
+        const imageBase64 = canvas.toDataURL("image/jpeg", 0.8);
+
+        // Free GPU/canvas memory immediately — don't hold 350 canvases at once
+        canvas.width = 0;
+        canvas.height = 0;
+
         contactsWithImages.push({
           name: contact.name,
           phone: contact.phone,
-          cardImageBase64: canvas.toDataURL("image/png"),
+          cardImageBase64: imageBase64,
         });
+
+        // Yield to event loop every 50 contacts so the GC can reclaim freed canvas memory
+        if ((i + 1) % 50 === 0) {
+          await new Promise(r => setTimeout(r, 80));
+        }
       }
     } catch (captureErr) {
       console.error("Card capture failed:", captureErr);
@@ -840,7 +851,7 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
   };
 
   // ── WhatsApp share ─────────────────────────────────────────────────────────
-  const handleWhatsAppShare = (e: React.FormEvent) => {
+  const handleWhatsAppShare = (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     setWhatsappError("");
     if (!whatsappNumber.trim()) { setWhatsappError(tr('phoneRequired')); return; }
