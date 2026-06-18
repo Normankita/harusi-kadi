@@ -188,6 +188,8 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
   const [captureProgress, setCaptureProgress] = useState<{ current: number; total: number; name: string } | null>(null);
   const sessionIdRef = useRef<string>("");
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cancelRef = useRef(false);
+  const [isCancelled, setIsCancelled] = useState(false);
 
   const hasBulkContacts = !!(excelData && excelData.length > 0);
 
@@ -254,6 +256,26 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
     }
   };
 
+  const handleCancelBulkSend = () => {
+    cancelRef.current = true;
+    setIsCancelled(true);
+    stopPolling();
+    setIsSending(false);
+    setCaptureProgress(null);
+    setSendingProgress(prev => prev ? { ...prev, done: true, current: '' } : null);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setSendingProgress(null);
+    setCaptureProgress(null);
+    setSmsFallbackDismissed(false);
+    setSmsFallbackSending(false);
+    setSmsFallbackResult(null);
+    setIsCancelled(false);
+    cancelRef.current = false;
+  };
+
   // ── Poll send progress ────────────────────────────────────────────────────
   const pollProgress = useCallback(async (sessionId: string) => {
     try {
@@ -290,9 +312,13 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
       phone: normalizePhone(c.phone),
     }));
 
-    // Show the modal immediately so the user sees capture progress
+    // Reset cancel state and open the modal immediately
+    cancelRef.current = false;
+    setIsCancelled(false);
     setShowModal(true);
     setCaptureProgress({ current: 0, total: normalizedContacts.length, name: "" });
+    // Initialize sendingProgress now so the modal renders during capture phase
+    setSendingProgress({ sent: 0, total: normalizedContacts.length, current: '', success: 0, failed: 0, done: false });
 
     // ── Step 1: Capture a personalised card for every contact ───────────────
     const originalName = data.jinaLaMwalikwa;
@@ -304,6 +330,8 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
       }
 
       for (let i = 0; i < normalizedContacts.length; i++) {
+        if (cancelRef.current) break;
+
         const contact = normalizedContacts[i];
 
         // Update the preview card with this contact's name
@@ -363,9 +391,15 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
       return;
     }
 
-    // Restore original name (empty = blank line on card) after all captures
+    // Restore original name after all captures
     onUpdateData(prev => ({ ...prev, jinaLaMwalikwa: originalName }));
     setCaptureProgress(null);
+
+    // If user cancelled during image capture, bail out
+    if (cancelRef.current) {
+      setSendingProgress(prev => prev ? { ...prev, done: true, current: '' } : null);
+      return;
+    }
 
     // ── Step 2: Start sending phase ──────────────────────────────────────────
     setSendingProgress({
@@ -861,6 +895,7 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
   };
 
   const smsSenderId = data.cardType === 'contribution' ? 'MICHANGO' : 'HARUSI';
+  const currentStep = captureProgress ? 1 : (!sendingProgress?.done && !isCancelled) ? 2 : 3;
 
   const handleSmsStyleChange = (style: SmsStyle) => {
     setSmsMessageStyle(style);
@@ -1415,49 +1450,155 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
           WHATSAPP BULK SEND PROGRESS MODAL
       ═══════════════════════════════════════════════════ */}
       {showModal && sendingProgress && (
-        <div className="fixed inset-0 bg-stone-900/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-stone-100 overflow-hidden animate-fade-slide-in">
+        <div className="fixed inset-0 bg-stone-900/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-fade-slide-in">
 
-            {/* Modal header */}
-            <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2.5 text-white">
-                <MessageSquare className="w-5 h-5" />
-                <div>
-                  <h3 className="font-bold text-sm">
-                    {captureProgress ? tr('bulkPrepTitle') : tr('bulkSendingTitle')}
-                  </h3>
-                  <p className="text-emerald-100 text-[11px] mt-0.5">
-                    {captureProgress
-                      ? tr('bulkPrepDesc', { current: captureProgress.current, total: captureProgress.total })
-                      : tr('bulkSendingDesc')
-                    }
-                  </p>
+            {/* ── Header with steps ── */}
+            <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 px-6 pt-5 pb-5">
+              <div className="flex items-start justify-between gap-3 mb-5">
+                <div className="flex items-center gap-2.5 text-white min-w-0">
+                  <MessageSquare className="w-5 h-5 shrink-0" />
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm leading-tight">
+                      {isCancelled
+                        ? (language === 'en' ? 'Send cancelled' : 'Utumaji umesimamishwa')
+                        : currentStep === 1
+                          ? (language === 'en' ? 'Preparing cards…' : 'Kuandaa kadi…')
+                          : currentStep === 2
+                            ? (language === 'en' ? 'Sending messages…' : 'Kutuma ujumbe…')
+                            : (language === 'en' ? 'Send complete' : 'Kutuma kumekamilika')}
+                    </h3>
+                    <p className="text-emerald-100 text-[11px] mt-0.5 truncate">
+                      {currentStep === 1 && captureProgress
+                        ? (language === 'en'
+                          ? `${captureProgress.current} of ${captureProgress.total} cards ready`
+                          : `Kadi ${captureProgress.current} kati ya ${captureProgress.total} zimeandaliwa`)
+                        : currentStep === 2
+                          ? (language === 'en'
+                            ? `${sendingProgress.sent} of ${sendingProgress.total} sent`
+                            : `${sendingProgress.sent} kati ya ${sendingProgress.total} zimetumwa`)
+                          : isCancelled
+                            ? (language === 'en' ? 'Process stopped by user' : 'Mchakato ulisimamishwa na mtumiaji')
+                            : (language === 'en'
+                              ? `${sendingProgress.success} sent · ${sendingProgress.failed} failed`
+                              : `${sendingProgress.success} zimetumwa · ${sendingProgress.failed} zimeshindwa`)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Cancel / Close */}
+                {!sendingProgress.done ? (
+                  <button
+                    onClick={handleCancelBulkSend}
+                    className="flex items-center gap-1.5 shrink-0 bg-white/15 hover:bg-white/25 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    {language === 'en' ? 'Cancel' : 'Simama'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={closeModal}
+                    className="shrink-0 text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/15 transition-all cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Step indicators */}
+              <div className="flex items-center">
+                {/* Step 1 */}
+                <div className="flex flex-col items-center gap-1">
+                  <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
+                    currentStep > 1 ? 'bg-white border-white text-emerald-700' : 'border-white bg-white/20 text-white'
+                  }`}>
+                    {currentStep > 1
+                      ? <CheckCircle2 className="w-4 h-4" />
+                      : <Loader2 className="w-4 h-4 animate-spin" />}
+                  </div>
+                  <span className="text-[10px] font-semibold text-white whitespace-nowrap">
+                    {language === 'en' ? 'Prepare' : 'Kuandaa'}
+                  </span>
+                </div>
+
+                {/* Connector 1→2 */}
+                <div className={`flex-1 h-0.5 mx-2 mb-4 rounded-full transition-all duration-500 ${currentStep > 1 ? 'bg-white' : 'bg-white/30'}`} />
+
+                {/* Step 2 */}
+                <div className="flex flex-col items-center gap-1">
+                  <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
+                    currentStep === 3 && !isCancelled ? 'bg-white border-white text-emerald-700'
+                    : currentStep === 3 && isCancelled ? 'bg-orange-400/30 border-orange-300 text-orange-200'
+                    : currentStep === 2 ? 'border-white bg-white/20 text-white'
+                    : 'border-white/30 bg-transparent text-white/40'
+                  }`}>
+                    {currentStep === 3 && !isCancelled ? <CheckCircle2 className="w-4 h-4" />
+                    : currentStep === 3 && isCancelled ? <X className="w-4 h-4" />
+                    : currentStep === 2 ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <span className="text-xs font-bold">2</span>}
+                  </div>
+                  <span className={`text-[10px] font-semibold whitespace-nowrap ${
+                    currentStep >= 2 ? (currentStep === 3 && isCancelled ? 'text-orange-200' : 'text-white') : 'text-white/40'
+                  }`}>
+                    {language === 'en' ? 'Send' : 'Tuma'}
+                  </span>
+                </div>
+
+                {/* Connector 2→3 */}
+                <div className={`flex-1 h-0.5 mx-2 mb-4 rounded-full transition-all duration-500 ${currentStep === 3 && !isCancelled ? 'bg-white' : 'bg-white/30'}`} />
+
+                {/* Step 3 */}
+                <div className="flex flex-col items-center gap-1">
+                  <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
+                    currentStep === 3 && !isCancelled ? 'bg-white border-white text-emerald-700'
+                    : currentStep === 3 && isCancelled ? 'bg-orange-400/30 border-orange-300 text-orange-200'
+                    : 'border-white/30 bg-transparent text-white/40'
+                  }`}>
+                    {currentStep === 3 && !isCancelled ? <CheckCircle2 className="w-4 h-4" />
+                    : currentStep === 3 && isCancelled ? <span className="text-sm font-bold">!</span>
+                    : <span className="text-xs font-bold">3</span>}
+                  </div>
+                  <span className={`text-[10px] font-semibold whitespace-nowrap ${
+                    currentStep === 3 ? (isCancelled ? 'text-orange-200' : 'text-white') : 'text-white/40'
+                  }`}>
+                    {currentStep === 3 && isCancelled
+                      ? (language === 'en' ? 'Stopped' : 'Imesimama')
+                      : (language === 'en' ? 'Done' : 'Imekamilika')}
+                  </span>
                 </div>
               </div>
-              {sendingProgress.done && (
-                <button
-                  onClick={() => {
-                    setShowModal(false);
-                    setSendingProgress(null);
-                    setSmsFallbackDismissed(false);
-                    setSmsFallbackSending(false);
-                    setSmsFallbackResult(null);
-                  }}
-                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-all cursor-pointer"
-                  title="Funga"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              )}
             </div>
 
+            {/* ── Body ── */}
             <div className="p-6 space-y-5">
-              {/* ── CAPTURE PHASE: show image prep progress ── */}
-              {captureProgress ? (
+
+              {/* ── CANCELLED notice ── */}
+              {isCancelled && (
+                <div className="flex items-center gap-3 p-4 bg-orange-50 rounded-xl border border-orange-200 animate-toast-in">
+                  <AlertTriangle className="w-5 h-5 text-orange-500 shrink-0" />
+                  <div>
+                    <p className="font-semibold text-orange-800 text-sm">
+                      {language === 'en' ? 'Send was cancelled' : 'Utumaji umesimamishwa'}
+                    </p>
+                    <p className="text-xs text-orange-600 mt-0.5">
+                      {language === 'en'
+                        ? `${sendingProgress.success} message(s) were sent before cancellation.`
+                        : `Ujumbe ${sendingProgress.success} ulitumwa kabla ya kusimama.`}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── STEP 1: Capture phase ── */}
+              {captureProgress && !isCancelled && (
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs font-semibold text-stone-600">
-                      <span>{tr('preparingImages', { current: captureProgress.current, total: captureProgress.total })}</span>
+                      <span>
+                        {language === 'en'
+                          ? `Preparing image ${captureProgress.current} of ${captureProgress.total}`
+                          : `Kuandaa picha ${captureProgress.current} kati ya ${captureProgress.total}`}
+                      </span>
                       <span className="text-amber-700 font-bold">
                         {captureProgress.total > 0 ? Math.round((captureProgress.current / captureProgress.total) * 100) : 0}%
                       </span>
@@ -1470,38 +1611,49 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                     </div>
                   </div>
                   <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-                    <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">{tr('placingName')}</p>
-                    <p className="text-sm font-bold text-amber-900 mt-0.5 truncate">{captureProgress.name}</p>
+                    <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">
+                      {language === 'en' ? 'Placing name on card' : 'Kuweka jina kwenye kadi'}
+                    </p>
+                    <p className="text-sm font-bold text-amber-900 mt-0.5 truncate">
+                      {captureProgress.name || '…'}
+                    </p>
                   </div>
-                  <p className="text-[11px] text-stone-400 text-center">
-                    {tr('pleaseWait')}
+                  <p className="text-[11px] text-stone-400 text-center flex items-center justify-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    {language === 'en' ? 'Please keep this window open…' : 'Tafadhali usifunge dirisha hili…'}
                   </p>
                 </div>
-              ) : (
+              )}
+
+              {/* ── STEP 2: Sending phase ── */}
+              {!captureProgress && !sendingProgress.done && !isCancelled && (
                 <>
-                  {/* Progress bar */}
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs font-semibold text-stone-600">
-                      <span>{tr('sentProgress', { sent: sendingProgress.sent, total: sendingProgress.total })}</span>
+                      <span>
+                        {language === 'en'
+                          ? `Sending ${sendingProgress.sent} of ${sendingProgress.total}`
+                          : `Kutuma ${sendingProgress.sent} kati ya ${sendingProgress.total}`}
+                      </span>
                       <span className="text-emerald-700 font-bold">{pct}%</span>
                     </div>
                     <div className="w-full bg-stone-100 rounded-full h-3 overflow-hidden">
                       <div
-                        className={`h-3 rounded-full transition-all duration-500 ${sendingProgress.done ? "bg-emerald-500" : "animate-progress-pulse"}`}
+                        className="h-3 rounded-full animate-progress-pulse transition-all duration-500"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
                   </div>
 
-                  {/* Current contact */}
-                  {!sendingProgress.done && sendingProgress.current && (
+                  {sendingProgress.current && (
                     <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3">
-                      <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">{tr('sendingTo')}</p>
-                      <p className="text-sm font-bold text-emerald-900 mt-0.5 truncate">{sendingProgress.current}...</p>
+                      <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">
+                        {language === 'en' ? 'Sending to' : 'Inatumia kwa'}
+                      </p>
+                      <p className="text-sm font-bold text-emerald-900 mt-0.5 truncate">{sendingProgress.current}…</p>
                     </div>
                   )}
 
-                  {/* Counters row */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex items-center gap-2.5 bg-emerald-50 rounded-xl p-3 border border-emerald-100">
                       <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -1519,19 +1671,20 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                     </div>
                   </div>
 
-                  {/* Time remaining */}
-                  {!sendingProgress.done && (
-                    <div className="flex items-center gap-2 text-xs text-stone-500">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>{tr('timeRemaining')} <strong className="text-stone-700">{estimatedRemaining}</strong></span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 text-xs text-stone-500">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{tr('timeRemaining')} <strong className="text-stone-700">{estimatedRemaining}</strong></span>
+                  </div>
+                </>
+              )}
 
-                  {/* ── COMPLETION SCREEN ── */}
-                  {sendingProgress.done && (
-                    <div className="space-y-4 border-t border-stone-100 pt-4">
+              {/* ── STEP 3: Complete / cancelled ── */}
+              {sendingProgress.done && (
+                <div className="space-y-4">
+                  {!isCancelled && (
+                    <>
                       <div className="flex items-center gap-2.5">
-                        <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                        <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
                         <div>
                           <p className="font-bold text-stone-800 text-sm">{tr('bulkSendComplete')}</p>
                           <p className="text-xs text-stone-500 mt-0.5">
@@ -1541,145 +1694,151 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                         </div>
                       </div>
 
-                      {/* Failed contacts list */}
-                      {failures.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-xs font-bold text-red-600 flex items-center gap-1">
-                            <XCircle className="w-3.5 h-3.5" />
-                            {tr('failedList', { count: failures.length })}
-                          </p>
-                          <div className="max-h-40 overflow-y-auto rounded-xl border border-red-100 divide-y divide-red-50">
-                            {failures.map((f, i) => (
-                              <div key={i} className="px-3 py-2 bg-red-50/50 text-xs">
-                                <div className="flex items-center justify-between">
-                                  <span className="font-semibold text-stone-800">{f.name}</span>
-                                  <span className="font-mono text-stone-500">{f.phone}</span>
-                                </div>
-                                <p className="text-red-500 mt-0.5">{f.reason}</p>
-                              </div>
-                            ))}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex items-center gap-2 bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <div>
+                            <p className="text-[10px] text-emerald-600 font-bold">{tr('successCount')}</p>
+                            <p className="text-lg font-black text-emerald-700">{sendingProgress.success}</p>
                           </div>
                         </div>
-                      )}
-
-                      {/* ── SMS FALLBACK after WhatsApp failures ── */}
-                      {failures.length > 0 && !smsFallbackDismissed && smsFallbackResult === null && (
-                        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4 space-y-3 animate-toast-in">
-                          <div className="flex items-start gap-2.5">
-                            <span className="text-xl shrink-0">📱</span>
-                            <div>
-                              <p className="font-bold text-amber-900 text-sm flex items-center gap-2">
-                              {tr('smsFallbackTitle')}
-                              <span className="font-mono font-bold text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-                                {smsSenderId}
-                              </span>
-                            </p>
-                              <p className="text-xs text-amber-800 mt-1">
-                                {tr('smsFallbackDesc', { count: failures.length })}
-                              </p>
-                            </div>
+                        <div className="flex items-center gap-2 bg-red-50 rounded-xl p-3 border border-red-100">
+                          <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                          <div>
+                            <p className="text-[10px] text-red-500 font-bold">{tr('failedCount')}</p>
+                            <p className="text-lg font-black text-red-600">{sendingProgress.failed}</p>
                           </div>
-                          {!smsFallbackSending ? (
-                            <div className="space-y-2">
-                              {/* Fallback style picker */}
-                              <div className="grid grid-cols-2 gap-1.5">
-                                {(['short', 'detailed'] as const).map(style => (
-                                  <button
-                                    key={style}
-                                    type="button"
-                                    onClick={() => setSmsFallbackMessageStyle(style)}
-                                    className={`text-left px-2.5 py-2 rounded-lg border-2 transition-all cursor-pointer ${
-                                      smsFallbackMessageStyle === style
-                                        ? 'border-amber-500 bg-amber-50'
-                                        : 'border-stone-200 bg-white hover:border-amber-200'
-                                    }`}
-                                  >
-                                    <div className="flex items-center gap-1.5">
-                                      <div className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                                        smsFallbackMessageStyle === style ? 'border-amber-500' : 'border-stone-400'
-                                      }`}>
-                                        {smsFallbackMessageStyle === style && <div className="w-1 h-1 rounded-full bg-amber-500" />}
-                                      </div>
-                                      <span className={`text-[10px] font-bold ${smsFallbackMessageStyle === style ? 'text-amber-800' : 'text-stone-700'}`}>
-                                        {style === 'short'
-                                          ? (language === 'en' ? 'Short' : 'Mfupi')
-                                          : (language === 'en' ? 'Detailed' : 'Kamili')}
-                                      </span>
-                                    </div>
-                                    <p className="text-[9px] text-stone-400 pl-4.5 mt-0.5">
-                                      {style === 'short' ? '~120 chars · TZS 16' : '~280 chars · TZS 32'}
-                                    </p>
-                                  </button>
-                                ))}
-                              </div>
-                              <div className="flex flex-col sm:flex-row gap-2">
-                                <button
-                                  onClick={handleSmsFallback}
-                                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-all cursor-pointer"
-                                >
-                                  <Send className="w-3.5 h-3.5 rotate-45" />
-                                  {tr('smsFallbackYes', { count: failures.length })}
-                                </button>
-                                <button
-                                  onClick={() => setSmsFallbackDismissed(true)}
-                                  className="flex-1 flex items-center justify-center py-2.5 px-4 rounded-xl border border-stone-300 text-stone-600 hover:bg-stone-50 font-semibold text-xs transition-all cursor-pointer"
-                                >
-                                  {tr('smsFallbackNo')}
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 text-xs text-amber-800 font-semibold">
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              {tr('smsFallbackSending', { count: failures.length })}
-                            </div>
-                          )}
                         </div>
-                      )}
-                      {smsFallbackResult !== null && (
-                        <div className="rounded-xl border border-stone-200 p-3 space-y-1 text-xs animate-toast-in">
-                          <p className="flex items-center gap-1.5 text-emerald-700 font-semibold">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            {tr('smsFallbackSentResult', { count: smsFallbackResult.sent })}
-                          </p>
-                          {smsFallbackResult.failed > 0 && (
-                            <p className="flex items-center gap-1.5 text-red-600 font-semibold">
-                              <XCircle className="w-3.5 h-3.5" />
-                              {tr('smsFallbackFailedResult', { count: smsFallbackResult.failed })}
-                            </p>
-                          )}
-                        </div>
-                      )}
+                      </div>
+                    </>
+                  )}
 
-                      {/* Action buttons */}
-                      <div className="flex flex-col sm:flex-row gap-2.5">
-                        {failures.length > 0 && (
-                          <button
-                            onClick={downloadFailedContacts}
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-800 font-semibold text-xs transition-all cursor-pointer"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            {tr('downloadFailed')}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            setShowModal(false);
-                            setSendingProgress(null);
-                            setSmsFallbackDismissed(false);
-                            setSmsFallbackSending(false);
-                            setSmsFallbackResult(null);
-                          }}
-                          className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-all cursor-pointer"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          {tr('finish')}
-                        </button>
+                  {/* Failed contacts */}
+                  {failures.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-red-600 flex items-center gap-1">
+                        <XCircle className="w-3.5 h-3.5" />
+                        {tr('failedList', { count: failures.length })}
+                      </p>
+                      <div className="max-h-40 overflow-y-auto rounded-xl border border-red-100 divide-y divide-red-50">
+                        {failures.map((f, i) => (
+                          <div key={i} className="px-3 py-2 bg-red-50/50 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-stone-800">{f.name}</span>
+                              <span className="font-mono text-stone-500">{f.phone}</span>
+                            </div>
+                            <p className="text-red-500 mt-0.5">{f.reason}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
-                </>
+
+                  {/* SMS fallback */}
+                  {failures.length > 0 && !smsFallbackDismissed && smsFallbackResult === null && !isCancelled && (
+                    <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4 space-y-3 animate-toast-in">
+                      <div className="flex items-start gap-2.5">
+                        <span className="text-xl shrink-0">📱</span>
+                        <div>
+                          <p className="font-bold text-amber-900 text-sm flex items-center gap-2">
+                            {tr('smsFallbackTitle')}
+                            <span className="font-mono font-bold text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                              {smsSenderId}
+                            </span>
+                          </p>
+                          <p className="text-xs text-amber-800 mt-1">
+                            {tr('smsFallbackDesc', { count: failures.length })}
+                          </p>
+                        </div>
+                      </div>
+                      {!smsFallbackSending ? (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {(['short', 'detailed'] as const).map(style => (
+                              <button
+                                key={style}
+                                type="button"
+                                onClick={() => setSmsFallbackMessageStyle(style)}
+                                className={`text-left px-2.5 py-2 rounded-lg border-2 transition-all cursor-pointer ${
+                                  smsFallbackMessageStyle === style ? 'border-amber-500 bg-amber-50' : 'border-stone-200 bg-white hover:border-amber-200'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <div className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${smsFallbackMessageStyle === style ? 'border-amber-500' : 'border-stone-400'}`}>
+                                    {smsFallbackMessageStyle === style && <div className="w-1 h-1 rounded-full bg-amber-500" />}
+                                  </div>
+                                  <span className={`text-[10px] font-bold ${smsFallbackMessageStyle === style ? 'text-amber-800' : 'text-stone-700'}`}>
+                                    {style === 'short' ? (language === 'en' ? 'Short' : 'Mfupi') : (language === 'en' ? 'Detailed' : 'Kamili')}
+                                  </span>
+                                </div>
+                                <p className="text-[9px] text-stone-400 pl-4.5 mt-0.5">
+                                  {style === 'short' ? '~120 chars · TZS 16' : '~280 chars · TZS 32'}
+                                </p>
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <button
+                              onClick={handleSmsFallback}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-all cursor-pointer"
+                            >
+                              <Send className="w-3.5 h-3.5 rotate-45" />
+                              {tr('smsFallbackYes', { count: failures.length })}
+                            </button>
+                            <button
+                              onClick={() => setSmsFallbackDismissed(true)}
+                              className="flex-1 flex items-center justify-center py-2.5 px-4 rounded-xl border border-stone-300 text-stone-600 hover:bg-stone-50 font-semibold text-xs transition-all cursor-pointer"
+                            >
+                              {tr('smsFallbackNo')}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs text-amber-800 font-semibold">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          {tr('smsFallbackSending', { count: failures.length })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {smsFallbackResult !== null && (
+                    <div className="rounded-xl border border-stone-200 p-3 space-y-1 text-xs animate-toast-in">
+                      <p className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {tr('smsFallbackSentResult', { count: smsFallbackResult.sent })}
+                      </p>
+                      {smsFallbackResult.failed > 0 && (
+                        <p className="flex items-center gap-1.5 text-red-600 font-semibold">
+                          <XCircle className="w-3.5 h-3.5" />
+                          {tr('smsFallbackFailedResult', { count: smsFallbackResult.failed })}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex flex-col sm:flex-row gap-2.5 pt-2 border-t border-stone-100">
+                    {failures.length > 0 && (
+                      <button
+                        onClick={downloadFailedContacts}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-800 font-semibold text-xs transition-all cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        {tr('downloadFailed')}
+                      </button>
+                    )}
+                    <button
+                      onClick={closeModal}
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-all cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      {tr('finish')}
+                    </button>
+                  </div>
+                </div>
               )}
+
             </div>
           </div>
         </div>
