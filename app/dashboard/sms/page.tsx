@@ -49,6 +49,27 @@ interface BatchDetail extends BatchSummary {
   recipients: Recipient[];
 }
 
+interface NeverDeliveredEntry {
+  phone: string;
+  name: string;
+  attemptCount: number;
+  lastAttemptAt: string;
+  lastReason: string | null;
+  batches: {
+    batchId: string;
+    batchCreatedAt: string;
+    cardType: string;
+    status: string;
+    reason: string | null;
+  }[];
+}
+
+interface NeverDeliveredResponse {
+  neverDelivered: NeverDeliveredEntry[];
+  totalNeverDelivered: number;
+  totalUniquePhonesSeen: number;
+}
+
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
 async function fetchBatches(filters?: {
@@ -87,6 +108,23 @@ async function updateBatchMessage(id: string, message: string) {
     body: JSON.stringify({ message }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fetchKnownPhones(): Promise<Set<string>> {
+  const res = await fetch(`${BACKEND_URL}/sms/recipients/known-phones`, {
+    headers: { 'x-api-key': API_KEY },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return new Set(data.phones);
+}
+
+async function fetchNeverDelivered(): Promise<NeverDeliveredResponse> {
+  const res = await fetch(`${BACKEND_URL}/sms/recipients/never-delivered`, {
+    headers: { 'x-api-key': API_KEY },
+  });
+  if (!res.ok) throw new Error('Failed to fetch never-delivered list');
   return res.json();
 }
 
@@ -135,6 +173,64 @@ function exportToExcel(recipients: Recipient[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
+// ─── Excel parsing (mirrored from InvitationForm.tsx) ────────────────────────
+
+function parsePhoneNumbers(raw: string): string[] {
+  if (!raw) return [];
+  const str = raw.toString().trim();
+  if (!str) return [];
+  if (/[,/\\;|]/.test(str)) {
+    return str.split(/[,/\\;|]+/).map(p => p.replace(/\s+/g, '').trim()).filter(p => p.length >= 9);
+  }
+  const stripped = str.replace(/\s+/g, '');
+  if (/^\+?\d{9,13}$/.test(stripped)) return [stripped];
+  const tokens = str.trim().split(/\s+/);
+  const numbers: string[] = [];
+  let current = '';
+  for (const token of tokens) {
+    const cleaned = token.replace(/\D/g, '');
+    if (!cleaned) continue;
+    if (current === '') { current = cleaned; }
+    else if (current.length >= 9 && current.length <= 13) { numbers.push(current); current = cleaned; }
+    else { current = current + cleaned; }
+  }
+  if (current && current.length >= 9) numbers.push(current);
+  return numbers.length > 0 ? numbers : stripped.length >= 9 ? [stripped] : [];
+}
+
+function normalizeParsedPhone(phone: string): string {
+  const cleaned = phone.replace(/[^\d]/g, '');
+  if (cleaned.startsWith('0') && cleaned.length === 10) return '255' + cleaned.substring(1);
+  if (cleaned.length === 9 && !cleaned.startsWith('255')) return '255' + cleaned;
+  return cleaned;
+}
+
+function parseExcelContacts(fileData: ArrayBuffer): { name: string; phone: string }[] {
+  const workbook = XLSX.read(fileData, { type: 'array' });
+  const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1 }) as unknown[][];
+  if (rows.length === 0) throw new Error('Empty file');
+  const headers = (rows[0] as unknown[]).map(h => String(h ?? '').trim().toLowerCase());
+  const jinaIndex = headers.findIndex(h => h === 'jina' || h === 'name' || h === 'recipient name' || h === 'recipient');
+  const simuIndex = headers.findIndex(h => h === 'simu' || h === 'phone' || h === 'simu ya mwalikwa' || h === 'phone number' || h === 'recipient phone');
+  if (jinaIndex === -1) throw new Error('Jina column not found');
+  const contacts: { name: string; phone: string }[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i] as unknown[];
+    if (!row || row.length === 0) continue;
+    const name = String(row[jinaIndex] ?? '').trim();
+    if (!name) continue;
+    const phoneRaw = simuIndex !== -1 && row[simuIndex] !== undefined ? String(row[simuIndex] ?? '').trim() : '';
+    const phones = parsePhoneNumbers(phoneRaw).map(normalizeParsedPhone).filter(p => p.length >= 9);
+    if (phones.length <= 1) {
+      contacts.push({ name, phone: phones[0] ?? phoneRaw });
+    } else {
+      phones.forEach((phone, idx) => contacts.push({ name: `${name} (${idx + 1})`, phone }));
+    }
+  }
+  return contacts;
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
@@ -160,7 +256,10 @@ export default function SmsDashboardPage() {
   const { language } = useLanguage();
   const sw = language === 'sw';
 
-  // List state
+  // ── Tab ───────────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<'batches' | 'neverDelivered' | 'crossCheck'>('batches');
+
+  // ── Batch list state ──────────────────────────────────────────────────────
   const [batches, setBatches] = useState<BatchSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -181,6 +280,25 @@ export default function SmsDashboardPage() {
   const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set());
   const [resending, setResending] = useState(false);
   const [resendProgress, setResendProgress] = useState<{ sent: number; failed: number } | null>(null);
+
+  // ── Never-delivered state ──────────────────────────────────────────────────
+  const [neverDeliveredData, setNeverDeliveredData] = useState<NeverDeliveredResponse | null>(null);
+  const [loadingNeverDelivered, setLoadingNeverDelivered] = useState(false);
+  const [ndSearchQuery, setNdSearchQuery] = useState('');
+  const [ndSelectedPhones, setNdSelectedPhones] = useState<Set<string>>(new Set());
+  const [ndCardType, setNdCardType] = useState<'invitation' | 'contribution'>('invitation');
+  const [ndMessage, setNdMessage] = useState('');
+  const [ndSending, setNdSending] = useState(false);
+  const [ndSendResult, setNdSendResult] = useState<{ sent?: number; failed?: number } | null>(null);
+
+  // ── Cross-check state ─────────────────────────────────────────────────────
+  const [crossCheckResult, setCrossCheckResult] = useState<{
+    neverAttempted: { name: string; phone: string }[];
+    alreadyAttempted: { name: string; phone: string }[];
+    totalFromExcel: number;
+  } | null>(null);
+  const [loadingCrossCheck, setLoadingCrossCheck] = useState(false);
+  const [crossCheckError, setCrossCheckError] = useState<string | null>(null);
 
   // ── Load batches ──────────────────────────────────────────────────────────
   const loadBatches = useCallback(async () => {
@@ -211,6 +329,21 @@ export default function SmsDashboardPage() {
   }, [cardTypeFilter, batchStatusFilter, dateFilter]);
 
   useEffect(() => { loadBatches(); }, [loadBatches]);
+
+  // ── Load never-delivered lazily when tab first opens ──────────────────────
+  const refreshNeverDelivered = useCallback(() => {
+    setLoadingNeverDelivered(true);
+    fetchNeverDelivered()
+      .then(setNeverDeliveredData)
+      .catch(console.error)
+      .finally(() => setLoadingNeverDelivered(false));
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'neverDelivered' && !neverDeliveredData) {
+      refreshNeverDelivered();
+    }
+  }, [activeTab, neverDeliveredData, refreshNeverDelivered]);
 
   // ── Open batch detail ─────────────────────────────────────────────────────
   const openBatch = async (id: string) => {
@@ -252,7 +385,7 @@ export default function SmsDashboardPage() {
     }
   };
 
-  // ── Filtered recipients ───────────────────────────────────────────────────
+  // ── Batch modal: filtered recipients ─────────────────────────────────────
   const filteredRecipients = selectedBatch?.recipients.filter(r => {
     const matchesSearch = !searchQuery ||
       r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -261,7 +394,7 @@ export default function SmsDashboardPage() {
     return matchesSearch && matchesStatus;
   }) ?? [];
 
-  // ── Selection ─────────────────────────────────────────────────────────────
+  // ── Batch modal: selection ────────────────────────────────────────────────
   const toggleRecipient = (phone: string) =>
     setSelectedRecipients(prev => {
       const next = new Set(prev);
@@ -286,7 +419,7 @@ export default function SmsDashboardPage() {
     });
   };
 
-  // ── Resend ────────────────────────────────────────────────────────────────
+  // ── Batch modal: resend ───────────────────────────────────────────────────
   const handleResendSelected = async () => {
     if (!selectedBatch || selectedRecipients.size === 0) return;
     setResending(true);
@@ -313,12 +446,124 @@ export default function SmsDashboardPage() {
     }
   };
 
+  // ── Never-delivered: filtered list ────────────────────────────────────────
+  const filteredNeverDelivered = (neverDeliveredData?.neverDelivered ?? []).filter(
+    r => !ndSearchQuery ||
+      r.name.toLowerCase().includes(ndSearchQuery.toLowerCase()) ||
+      r.phone.includes(ndSearchQuery)
+  );
+
+  // ── Never-delivered: selection ────────────────────────────────────────────
+  const toggleNdPhone = (phone: string) =>
+    setNdSelectedPhones(prev => {
+      const next = new Set(prev);
+      next.has(phone) ? next.delete(phone) : next.add(phone);
+      return next;
+    });
+
+  const toggleNdSelectAll = () => {
+    const allSelected = filteredNeverDelivered.length > 0 &&
+      filteredNeverDelivered.every(r => ndSelectedPhones.has(r.phone));
+    setNdSelectedPhones(prev => {
+      const next = new Set(prev);
+      allSelected
+        ? filteredNeverDelivered.forEach(r => next.delete(r.phone))
+        : filteredNeverDelivered.forEach(r => next.add(r.phone));
+      return next;
+    });
+  };
+
+  // ── Never-delivered: send ─────────────────────────────────────────────────
+  const handleSendToNeverDelivered = async () => {
+    if (ndSelectedPhones.size === 0 || !ndMessage.trim()) return;
+    setNdSending(true);
+    setNdSendResult(null);
+    const recipients = (neverDeliveredData?.neverDelivered ?? [])
+      .filter(r => ndSelectedPhones.has(r.phone))
+      .map(r => ({ name: r.name, phone: r.phone }));
+    try {
+      const res = await fetch('/api/sms/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contacts: recipients, message: ndMessage, cardType: ndCardType }),
+      });
+      const result = await res.json();
+      setNdSendResult(result);
+      refreshNeverDelivered();
+      setNdSelectedPhones(new Set());
+    } catch (err) {
+      console.error('Resend failed:', err);
+    } finally {
+      setNdSending(false);
+    }
+  };
+
+  const handleExportNeverDelivered = () => {
+    exportToExcel(
+      filteredNeverDelivered.map(r => ({
+        name: r.name,
+        phone: r.phone,
+        message: '',
+        status: 'failed' as const,
+        reason: r.lastReason,
+      })),
+      'Waliokosa_SMS_Wote.xlsx'
+    );
+  };
+
+  // ── Cross-check ───────────────────────────────────────────────────────────
+  const handleCrossCheckUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCrossCheckError(null);
+    setCrossCheckResult(null);
+    setLoadingCrossCheck(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const contacts = parseExcelContacts(buffer);
+      if (contacts.length === 0) throw new Error(sw ? 'Hakuna data iliyopatikana' : 'No contacts found in file');
+      const known = await fetchKnownPhones();
+      const neverAttempted = contacts.filter(c => !known.has(c.phone));
+      const alreadyAttempted = contacts.filter(c => known.has(c.phone));
+      setCrossCheckResult({ neverAttempted, alreadyAttempted, totalFromExcel: contacts.length });
+    } catch (err) {
+      setCrossCheckError(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setLoadingCrossCheck(false);
+      e.target.value = '';
+    }
+  };
+
+  const exportCrossCheckList = (contacts: { name: string; phone: string }[], filename: string) => {
+    const wb = XLSX.utils.book_new();
+    const rows = [
+      ['S/N', 'Jina', 'Simu'],
+      ...contacts.map((c, i) => [i + 1, c.name, c.phone]),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 6 }, { wch: 24 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Watu');
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([out], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   // ── Computed ──────────────────────────────────────────────────────────────
   const totalSent = batches.reduce((s, b) => s + b.sentCount, 0);
   const failedRecipients = selectedBatch?.recipients.filter(r => r.status === 'failed') ?? [];
   const allVisibleSelected =
     filteredRecipients.length > 0 &&
     filteredRecipients.every(r => selectedRecipients.has(r.phone));
+  const ndAllVisibleSelected =
+    filteredNeverDelivered.length > 0 &&
+    filteredNeverDelivered.every(r => ndSelectedPhones.has(r.phone));
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -343,7 +588,7 @@ export default function SmsDashboardPage() {
           </div>
 
           <div className="flex items-center gap-2 text-xs text-ui-muted">
-            {!loading && batches.length > 0 && (
+            {activeTab === 'batches' && !loading && batches.length > 0 && (
               <>
                 <span className="font-semibold text-ui-text">{batches.length}</span>
                 {' '}{sw ? 'matumizi' : 'batches'}
@@ -352,164 +597,554 @@ export default function SmsDashboardPage() {
                 {' '}{sw ? 'zimetumwa' : 'sent'}
               </>
             )}
-            <button
-              type="button"
-              onClick={loadBatches}
-              disabled={loading}
-              title={sw ? 'Onyesha upya' : 'Refresh'}
-              className="ml-1 p-1.5 rounded-lg text-ui-muted hover:text-ui-text hover:bg-ui-bg transition-colors cursor-pointer disabled:opacity-40"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
+            {activeTab === 'batches' && (
+              <button
+                type="button"
+                onClick={loadBatches}
+                disabled={loading}
+                title={sw ? 'Onyesha upya' : 'Refresh'}
+                className="ml-1 p-1.5 rounded-lg text-ui-muted hover:text-ui-text hover:bg-ui-bg transition-colors cursor-pointer disabled:opacity-40"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+            {activeTab === 'neverDelivered' && (
+              <button
+                type="button"
+                onClick={refreshNeverDelivered}
+                disabled={loadingNeverDelivered}
+                title={sw ? 'Onyesha upya' : 'Refresh'}
+                className="ml-1 p-1.5 rounded-lg text-ui-muted hover:text-ui-text hover:bg-ui-bg transition-colors cursor-pointer disabled:opacity-40"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingNeverDelivered ? 'animate-spin' : ''}`} />
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-5">
 
-        {/* ─── Filters ──────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap gap-2.5 bg-ui-card rounded-2xl border border-ui-border p-3">
-          {/* Date */}
-          <div className="relative">
-            <select
-              value={dateFilter}
-              onChange={e => setDateFilter(e.target.value)}
-              className="appearance-none text-xs font-semibold pl-3 pr-7 py-2 rounded-xl border border-ui-border bg-ui-bg text-ui-text focus:border-amber-500 outline-none cursor-pointer"
-            >
-              <option value="">{sw ? 'Tarehe: Zote' : 'Date: All'}</option>
-              <option value="today">{sw ? 'Leo' : 'Today'}</option>
-              <option value="week">{sw ? 'Wiki hii' : 'This week'}</option>
-              <option value="month">{sw ? 'Mwezi huu' : 'This month'}</option>
-            </select>
-            <ChevronDown className="absolute right-2 top-2.5 w-3 h-3 text-ui-muted pointer-events-none" />
-          </div>
-
-          {/* Card type */}
-          <div className="relative">
-            <select
-              value={cardTypeFilter}
-              onChange={e => setCardTypeFilter(e.target.value)}
-              className="appearance-none text-xs font-semibold pl-3 pr-7 py-2 rounded-xl border border-ui-border bg-ui-bg text-ui-text focus:border-amber-500 outline-none cursor-pointer"
-            >
-              <option value="">{sw ? 'Aina: Zote' : 'Type: All'}</option>
-              <option value="invitation">{sw ? 'Mwaliko' : 'Invitation'}</option>
-              <option value="contribution">{sw ? 'Mchango' : 'Contribution'}</option>
-            </select>
-            <ChevronDown className="absolute right-2 top-2.5 w-3 h-3 text-ui-muted pointer-events-none" />
-          </div>
-
-          {/* Status */}
-          <div className="relative">
-            <select
-              value={batchStatusFilter}
-              onChange={e => setBatchStatusFilter(e.target.value)}
-              className="appearance-none text-xs font-semibold pl-3 pr-7 py-2 rounded-xl border border-ui-border bg-ui-bg text-ui-text focus:border-amber-500 outline-none cursor-pointer"
-            >
-              <option value="">{sw ? 'Hali: Zote' : 'Status: All'}</option>
-              <option value="complete">{sw ? 'Imekamilika' : 'Complete'}</option>
-              <option value="partial">{sw ? 'Sehemu' : 'Partial'}</option>
-            </select>
-            <ChevronDown className="absolute right-2 top-2.5 w-3 h-3 text-ui-muted pointer-events-none" />
-          </div>
+        {/* ─── Tab switcher ─────────────────────────────────────────────── */}
+        <div className="flex rounded-2xl border border-ui-border bg-ui-card p-1 gap-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('batches')}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'batches'
+                ? 'bg-amber-500 text-white shadow-sm'
+                : 'text-ui-muted hover:text-ui-text hover:bg-ui-bg'
+            }`}
+          >
+            {sw ? 'Makundi ya SMS' : 'SMS Batches'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('neverDelivered')}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'neverDelivered'
+                ? 'bg-red-500 text-white shadow-sm'
+                : 'text-ui-muted hover:text-ui-text hover:bg-ui-bg'
+            }`}
+          >
+            {sw ? 'Waliokosa SMS' : 'Failed Recipients'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('crossCheck')}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'crossCheck'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-ui-muted hover:text-ui-text hover:bg-ui-bg'
+            }`}
+          >
+            {sw ? 'Linganisha na Excel' : 'Cross-Check Excel'}
+          </button>
         </div>
 
-        {/* ─── Error ────────────────────────────────────────────────────── */}
-        {loadError && (
-          <div className="flex items-center gap-2 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-sm">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>
-              {sw ? 'Imeshindwa kupakia data' : 'Failed to load data'}: {loadError}
-            </span>
-          </div>
-        )}
-
-        {/* ─── Loading ──────────────────────────────────────────────────── */}
-        {loading && (
-          <div className="space-y-3">
-            <SkeletonCard />
-            <SkeletonCard />
-            <SkeletonCard />
-          </div>
-        )}
-
-        {/* ─── Empty ────────────────────────────────────────────────────── */}
-        {!loading && !loadError && batches.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
-            <MessageSquare className="w-12 h-12 text-stone-300" />
-            <p className="font-semibold text-ui-muted text-sm">
-              {sw ? 'Hakuna SMS zilizotumwa bado.' : 'No SMS batches sent yet.'}
-            </p>
-            <p className="text-xs text-ui-muted max-w-xs">
-              {sw
-                ? 'SMS utakaotumwa kupitia programu utaonekana hapa.'
-                : 'SMS batches sent through the app will appear here.'}
-            </p>
-          </div>
-        )}
-
-        {/* ─── Batch list ───────────────────────────────────────────────── */}
-        {!loading && !loadError && batches.length > 0 && (
-          <div className="space-y-3">
-            {batches.map(batch => {
-              const isContrib = batch.cardType === 'contribution';
-              return (
-                <button
-                  key={batch.id}
-                  type="button"
-                  onClick={() => openBatch(batch.id)}
-                  className={`w-full text-left rounded-2xl border bg-ui-card p-4 transition-all hover:shadow-sm active:scale-[0.99] cursor-pointer border-l-4 ${
-                    isContrib
-                      ? 'border-l-amber-400 border-ui-border hover:border-amber-200'
-                      : 'border-l-emerald-500 border-ui-border hover:border-emerald-200'
-                  }`}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* BATCHES TAB                                                     */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {activeTab === 'batches' && (
+          <>
+            {/* ─── Filters ──────────────────────────────────────────────── */}
+            <div className="flex flex-wrap gap-2.5 bg-ui-card rounded-2xl border border-ui-border p-3">
+              <div className="relative">
+                <select
+                  value={dateFilter}
+                  onChange={e => setDateFilter(e.target.value)}
+                  className="appearance-none text-xs font-semibold pl-3 pr-7 py-2 rounded-xl border border-ui-border bg-ui-bg text-ui-text focus:border-amber-500 outline-none cursor-pointer"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1.5 min-w-0 flex-1">
-                      {/* Date + imported badge */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[11px] text-ui-muted font-mono">
-                          {formatDate(batch.createdAt, language)}
+                  <option value="">{sw ? 'Tarehe: Zote' : 'Date: All'}</option>
+                  <option value="today">{sw ? 'Leo' : 'Today'}</option>
+                  <option value="week">{sw ? 'Wiki hii' : 'This week'}</option>
+                  <option value="month">{sw ? 'Mwezi huu' : 'This month'}</option>
+                </select>
+                <ChevronDown className="absolute right-2 top-2.5 w-3 h-3 text-ui-muted pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select
+                  value={cardTypeFilter}
+                  onChange={e => setCardTypeFilter(e.target.value)}
+                  className="appearance-none text-xs font-semibold pl-3 pr-7 py-2 rounded-xl border border-ui-border bg-ui-bg text-ui-text focus:border-amber-500 outline-none cursor-pointer"
+                >
+                  <option value="">{sw ? 'Aina: Zote' : 'Type: All'}</option>
+                  <option value="invitation">{sw ? 'Mwaliko' : 'Invitation'}</option>
+                  <option value="contribution">{sw ? 'Mchango' : 'Contribution'}</option>
+                </select>
+                <ChevronDown className="absolute right-2 top-2.5 w-3 h-3 text-ui-muted pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select
+                  value={batchStatusFilter}
+                  onChange={e => setBatchStatusFilter(e.target.value)}
+                  className="appearance-none text-xs font-semibold pl-3 pr-7 py-2 rounded-xl border border-ui-border bg-ui-bg text-ui-text focus:border-amber-500 outline-none cursor-pointer"
+                >
+                  <option value="">{sw ? 'Hali: Zote' : 'Status: All'}</option>
+                  <option value="complete">{sw ? 'Imekamilika' : 'Complete'}</option>
+                  <option value="partial">{sw ? 'Sehemu' : 'Partial'}</option>
+                </select>
+                <ChevronDown className="absolute right-2 top-2.5 w-3 h-3 text-ui-muted pointer-events-none" />
+              </div>
+            </div>
+
+            {/* ─── Error ────────────────────────────────────────────────── */}
+            {loadError && (
+              <div className="flex items-center gap-2 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{sw ? 'Imeshindwa kupakia data' : 'Failed to load data'}: {loadError}</span>
+              </div>
+            )}
+
+            {/* ─── Loading ──────────────────────────────────────────────── */}
+            {loading && (
+              <div className="space-y-3">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            )}
+
+            {/* ─── Empty ────────────────────────────────────────────────── */}
+            {!loading && !loadError && batches.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
+                <MessageSquare className="w-12 h-12 text-stone-300" />
+                <p className="font-semibold text-ui-muted text-sm">
+                  {sw ? 'Hakuna SMS zilizotumwa bado.' : 'No SMS batches sent yet.'}
+                </p>
+                <p className="text-xs text-ui-muted max-w-xs">
+                  {sw
+                    ? 'SMS utakaotumwa kupitia programu utaonekana hapa.'
+                    : 'SMS batches sent through the app will appear here.'}
+                </p>
+              </div>
+            )}
+
+            {/* ─── Batch list ───────────────────────────────────────────── */}
+            {!loading && !loadError && batches.length > 0 && (
+              <div className="space-y-3">
+                {batches.map(batch => {
+                  const isContrib = batch.cardType === 'contribution';
+                  return (
+                    <button
+                      key={batch.id}
+                      type="button"
+                      onClick={() => openBatch(batch.id)}
+                      className={`w-full text-left rounded-2xl border bg-ui-card p-4 transition-all hover:shadow-sm active:scale-[0.99] cursor-pointer border-l-4 ${
+                        isContrib
+                          ? 'border-l-amber-400 border-ui-border hover:border-amber-200'
+                          : 'border-l-emerald-500 border-ui-border hover:border-emerald-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1.5 min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[11px] text-ui-muted font-mono">
+                              {formatDate(batch.createdAt, language)}
+                            </span>
+                            {batch.imported && (
+                              <span className="text-[10px] bg-stone-100 text-stone-500 rounded-full px-2 py-0.5 font-semibold border border-stone-200">
+                                {sw ? 'Historia ya Awali' : 'Previous History'}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm font-bold text-ui-text">
+                            {isContrib ? (sw ? 'Mchango' : 'Contribution') : (sw ? 'Mwaliko' : 'Invitation')}
+                            {' — '}
+                            <span className="font-mono text-xs font-semibold text-ui-muted">{batch.senderId}</span>
+                          </p>
+                          <div className="flex items-center gap-3 text-xs flex-wrap">
+                            <span className="text-ui-muted">
+                              {sw ? `Watu ${batch.totalContacts}` : `${batch.totalContacts} contacts`}
+                            </span>
+                            <span className="flex items-center gap-1 text-emerald-600 font-semibold">
+                              <CheckCircle2 className="w-3 h-3" />
+                              {batch.sentCount}
+                            </span>
+                            {batch.failedCount > 0 ? (
+                              <span className="flex items-center gap-1 text-red-600 font-semibold">
+                                <XCircle className="w-3 h-3" />
+                                {batch.failedCount}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5 font-semibold">
+                                {sw ? 'Imekamilika ✓' : 'Complete ✓'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-xs text-amber-600 font-semibold shrink-0 mt-1">
+                          {sw ? 'Angalia →' : 'View →'}
                         </span>
-                        {batch.imported && (
-                          <span className="text-[10px] bg-stone-100 text-stone-500 rounded-full px-2 py-0.5 font-semibold border border-stone-200">
-                            {sw ? 'Historia ya Awali' : 'Previous History'}
-                          </span>
-                        )}
                       </div>
-                      {/* Type + sender */}
-                      <p className="text-sm font-bold text-ui-text">
-                        {isContrib ? (sw ? 'Mchango' : 'Contribution') : (sw ? 'Mwaliko' : 'Invitation')}
-                        {' — '}
-                        <span className="font-mono text-xs font-semibold text-ui-muted">{batch.senderId}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* NEVER-DELIVERED TAB                                             */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {activeTab === 'neverDelivered' && (
+          <div className="space-y-5">
+
+            {/* ─── Summary banner ───────────────────────────────────────── */}
+            {!loadingNeverDelivered && neverDeliveredData && (
+              <div className="bg-ui-card rounded-2xl border border-ui-border p-4 flex items-start justify-between gap-3">
+                <div className="space-y-0.5">
+                  {neverDeliveredData.totalNeverDelivered === 0 ? (
+                    <p className="text-sm font-bold text-emerald-700">
+                      {sw ? '🎉 Hongera! Watu wote wamepokea SMS.' : '🎉 Great! Everyone has received an SMS.'}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-bold text-red-700">
+                        {sw
+                          ? `Watu ${neverDeliveredData.totalNeverDelivered} hawajapokea SMS yoyote bado.`
+                          : `${neverDeliveredData.totalNeverDelivered} people have never received any SMS.`}
                       </p>
-                      {/* Counts */}
-                      <div className="flex items-center gap-3 text-xs flex-wrap">
-                        <span className="text-ui-muted">
-                          {sw ? `Watu ${batch.totalContacts}` : `${batch.totalContacts} contacts`}
-                        </span>
-                        <span className="flex items-center gap-1 text-emerald-600 font-semibold">
-                          <CheckCircle2 className="w-3 h-3" />
-                          {batch.sentCount}
-                        </span>
-                        {batch.failedCount > 0 ? (
-                          <span className="flex items-center gap-1 text-red-600 font-semibold">
-                            <XCircle className="w-3 h-3" />
-                            {batch.failedCount}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5 font-semibold">
-                            {sw ? 'Imekamilika ✓' : 'Complete ✓'}
-                          </span>
+                      <p className="text-xs text-ui-muted">
+                        {sw
+                          ? `Kati ya namba ${neverDeliveredData.totalUniquePhonesSeen} za kipekee zilizojaribiwa`
+                          : `Out of ${neverDeliveredData.totalUniquePhonesSeen} unique numbers seen`}
+                      </p>
+                    </>
+                  )}
+                </div>
+                {neverDeliveredData.totalNeverDelivered > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleExportNeverDelivered}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-ui-border bg-ui-bg hover:bg-amber-50 hover:border-amber-300 text-ui-text transition-all cursor-pointer shrink-0"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {sw ? 'Pakua Excel' : 'Export Excel'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ─── Loading skeleton ─────────────────────────────────────── */}
+            {loadingNeverDelivered && (
+              <div className="space-y-3">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            )}
+
+            {/* ─── Content (only when loaded and there are entries) ──────── */}
+            {!loadingNeverDelivered && neverDeliveredData && neverDeliveredData.totalNeverDelivered > 0 && (
+              <>
+                {/* ─── Search ─────────────────────────────────────────────── */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={ndSearchQuery}
+                    onChange={e => setNdSearchQuery(e.target.value)}
+                    placeholder={sw ? 'Tafuta jina au simu...' : 'Search name or phone...'}
+                    className="w-full text-xs pl-8 pr-3 py-2.5 rounded-xl border border-ui-border bg-ui-card text-ui-text focus:border-amber-500 outline-none"
+                  />
+                  <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-ui-muted" />
+                </div>
+
+                {/* ─── Table ──────────────────────────────────────────────── */}
+                <div className="overflow-x-auto rounded-2xl border border-ui-border bg-ui-card">
+                  <table className="w-full text-xs min-w-120">
+                    <thead className="bg-ui-bg border-b border-ui-border">
+                      <tr>
+                        <th className="px-3 py-2.5 w-8 text-left">
+                          <input
+                            type="checkbox"
+                            checked={ndAllVisibleSelected}
+                            onChange={toggleNdSelectAll}
+                            className="rounded cursor-pointer accent-amber-500"
+                          />
+                        </th>
+                        <th className="px-3 py-2.5 text-left font-semibold text-ui-text">
+                          {sw ? 'Jina' : 'Name'}
+                        </th>
+                        <th className="px-3 py-2.5 text-left font-semibold text-ui-text">
+                          {sw ? 'Simu' : 'Phone'}
+                        </th>
+                        <th className="px-3 py-2.5 text-left font-semibold text-ui-text">
+                          {sw ? 'Majaribio' : 'Attempts'}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-ui-border">
+                      {filteredNeverDelivered.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-3 py-8 text-center text-ui-muted">
+                            {sw ? 'Hakuna matokeo.' : 'No results found.'}
+                          </td>
+                        </tr>
+                      ) : filteredNeverDelivered.map((r, i) => (
+                        <tr
+                          key={`${r.phone}-${i}`}
+                          className={`transition-colors ${ndSelectedPhones.has(r.phone) ? 'bg-amber-50/50' : 'hover:bg-ui-bg'}`}
+                        >
+                          <td className="px-3 py-2.5">
+                            <input
+                              type="checkbox"
+                              checked={ndSelectedPhones.has(r.phone)}
+                              onChange={() => toggleNdPhone(r.phone)}
+                              className="rounded cursor-pointer accent-amber-500"
+                            />
+                          </td>
+                          <td className="px-3 py-2.5 font-medium text-ui-text">{r.name}</td>
+                          <td className="px-3 py-2.5 font-mono text-ui-muted">{r.phone}</td>
+                          <td className="px-3 py-2.5">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-red-50 text-red-700 border-red-200">
+                              <XCircle className="w-2.5 h-2.5" />
+                              {r.attemptCount}x
+                              {r.lastReason && ` · ${r.lastReason}`}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ─── Selection count ────────────────────────────────────── */}
+                {ndSelectedPhones.size > 0 && (
+                  <p className="text-xs text-amber-700 font-semibold">
+                    {sw ? `Waliochaguliwa: ${ndSelectedPhones.size}` : `Selected: ${ndSelectedPhones.size}`}
+                  </p>
+                )}
+
+                {/* ─── Composer (only when selection > 0) ─────────────────── */}
+                {ndSelectedPhones.size > 0 && (
+                  <div className="bg-ui-card rounded-2xl border border-ui-border p-5 space-y-4">
+                    <p className="text-xs font-bold text-ui-text">
+                      {sw ? 'Chagua aina ya ujumbe:' : 'Choose message type:'}
+                    </p>
+
+                    {/* Card type selector */}
+                    <div className="flex gap-2">
+                      {(['invitation', 'contribution'] as const).map(ct => (
+                        <button
+                          key={ct}
+                          type="button"
+                          onClick={() => setNdCardType(ct)}
+                          className={`flex-1 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                            ndCardType === ct
+                              ? ct === 'invitation'
+                                ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                : 'border-amber-500 bg-amber-50 text-amber-700'
+                              : 'border-ui-border bg-ui-bg text-ui-muted hover:bg-ui-card'
+                          }`}
+                        >
+                          {ct === 'invitation'
+                            ? (sw ? '💌 Mwaliko' : '💌 Invitation')
+                            : (sw ? '💰 Mchango' : '💰 Contribution')}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Message textarea */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-ui-text">
+                        {sw ? 'Ujumbe:' : 'Message:'}
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={ndMessage}
+                        onChange={e => setNdMessage(e.target.value)}
+                        placeholder={sw
+                          ? 'Andika ujumbe wako hapa... tumia {{name}} kwa jina'
+                          : 'Write your message here... use {{name}} for name'}
+                        className="w-full text-sm px-3.5 py-3 rounded-xl border border-stone-200 bg-white text-ui-text focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all resize-y"
+                      />
+                    </div>
+
+                    {/* Send result */}
+                    {ndSendResult && (
+                      <div className="rounded-xl border border-ui-border p-3 space-y-1 text-xs">
+                        {(ndSendResult.sent ?? 0) > 0 && (
+                          <p className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            {sw ? `Imetumwa: ${ndSendResult.sent}` : `Sent: ${ndSendResult.sent}`}
+                          </p>
+                        )}
+                        {(ndSendResult.failed ?? 0) > 0 && (
+                          <p className="flex items-center gap-1.5 text-red-600 font-semibold">
+                            <XCircle className="w-3.5 h-3.5" />
+                            {sw ? `Imeshindwa: ${ndSendResult.failed}` : `Failed: ${ndSendResult.failed}`}
+                          </p>
                         )}
                       </div>
-                    </div>
-                    <span className="text-xs text-amber-600 font-semibold shrink-0 mt-1">
-                      {sw ? 'Angalia →' : 'View →'}
-                    </span>
+                    )}
+
+                    {/* Send button */}
+                    <button
+                      type="button"
+                      onClick={handleSendToNeverDelivered}
+                      disabled={ndSending || !ndMessage.trim()}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                    >
+                      {ndSending
+                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {sw ? 'Inatuma...' : 'Sending...'}</>
+                        : <><Send className="w-3.5 h-3.5 rotate-45" />
+                            {sw
+                              ? `📤 Tuma SMS kwa Watu ${ndSelectedPhones.size}`
+                              : `📤 Send SMS to ${ndSelectedPhones.size} people`}
+                          </>
+                      }
+                    </button>
                   </div>
-                </button>
-              );
-            })}
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* CROSS-CHECK TAB                                                 */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {activeTab === 'crossCheck' && (
+          <div className="space-y-5">
+
+            {/* ─── Intro card + upload ────────────────────────────────────── */}
+            <div className="bg-ui-card rounded-2xl border border-ui-border p-5 space-y-4">
+              <div className="space-y-1.5">
+                <h2 className="text-sm font-bold text-ui-text">
+                  {sw ? '📂 Linganisha na Excel Yangu' : '📂 Cross-Check My Excel'}
+                </h2>
+                <p className="text-xs text-ui-muted leading-relaxed">
+                  {sw
+                    ? 'Pakia faili la Excel lako la awali (mfano: lenye watu 356) ili kuona ni watu gani hawajatumiwa SMS yoyote bado — sio aliyoshindwa bali hawakujaribiwa kabisa.'
+                    : 'Upload your original Excel file (e.g. 356 contacts) to find contacts who were never attempted at all — not failed, simply never submitted.'}
+                </p>
+              </div>
+
+              <label className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 border-dashed cursor-pointer transition-all text-xs font-bold ${
+                loadingCrossCheck
+                  ? 'border-blue-200 bg-blue-50 text-blue-400 cursor-not-allowed'
+                  : 'border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700'
+              }`}>
+                {loadingCrossCheck
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> {sw ? 'Inachunguza...' : 'Checking...'}</>
+                  : <><Download className="w-4 h-4 rotate-180" /> {sw ? 'Chagua Faili la Excel' : 'Choose Excel File'}</>
+                }
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  disabled={loadingCrossCheck}
+                  onChange={handleCrossCheckUpload}
+                />
+              </label>
+
+              {crossCheckError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{crossCheckError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* ─── Results ────────────────────────────────────────────────── */}
+            {crossCheckResult && (
+              <div className="bg-ui-card rounded-2xl border border-ui-border p-5 space-y-4">
+                <h3 className="text-sm font-bold text-ui-text">
+                  {sw ? '📊 Matokeo ya Ulinganisho' : '📊 Cross-Check Results'}
+                </h3>
+
+                {/* Summary stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-ui-border bg-ui-bg p-3 text-center space-y-0.5">
+                    <p className="text-lg font-bold text-ui-text">{crossCheckResult.totalFromExcel}</p>
+                    <p className="text-[10px] text-ui-muted font-semibold">
+                      {sw ? 'Jumla kwenye Excel' : 'Total in Excel'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center space-y-0.5">
+                    <p className="text-lg font-bold text-red-700">{crossCheckResult.neverAttempted.length}</p>
+                    <p className="text-[10px] text-red-600 font-semibold">
+                      {sw ? 'Hawajajaribiwa' : 'Never attempted'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-center space-y-0.5">
+                    <p className="text-lg font-bold text-green-700">{crossCheckResult.alreadyAttempted.length}</p>
+                    <p className="text-[10px] text-green-700 font-semibold">
+                      {sw ? 'Tayari wamejaribiwa' : 'Already attempted'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Export buttons */}
+                <div className="flex flex-col gap-2 pt-1">
+                  {crossCheckResult.neverAttempted.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => exportCrossCheckList(crossCheckResult.neverAttempted, 'Wasiojaribiwa.xlsx')}
+                      className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      {sw
+                        ? `📥 Pakua Excel ya Wasiojaribiwa (${crossCheckResult.neverAttempted.length})`
+                        : `📥 Export Never-Attempted Excel (${crossCheckResult.neverAttempted.length})`}
+                    </button>
+                  )}
+                  {crossCheckResult.alreadyAttempted.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => exportCrossCheckList(crossCheckResult.alreadyAttempted, 'Waliojaribiwa.xlsx')}
+                      className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-ui-border bg-ui-bg hover:bg-ui-card text-ui-text font-semibold text-xs transition-all cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      {sw
+                        ? `📥 Pakua Excel ya Waliojaribiwa (${crossCheckResult.alreadyAttempted.length})`
+                        : `📥 Export Already-Attempted Excel (${crossCheckResult.alreadyAttempted.length})`}
+                    </button>
+                  )}
+                  {crossCheckResult.neverAttempted.length === 0 && (
+                    <p className="text-center text-sm font-bold text-emerald-700 py-2">
+                      {sw ? '🎉 Watu wote kwenye Excel hii wamekwisha jaribiwa!' : '🎉 Everyone in this Excel has already been attempted!'}
+                    </p>
+                  )}
+                </div>
+
+                {/* Upload another */}
+                <div className="pt-1 border-t border-ui-border">
+                  <label className="flex items-center gap-1.5 text-xs text-ui-muted hover:text-ui-text font-semibold cursor-pointer transition-colors w-fit">
+                    <RefreshCw className="w-3 h-3" />
+                    {sw ? 'Pakia faili jingine' : 'Upload another file'}
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={handleCrossCheckUpload}
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -729,7 +1364,6 @@ export default function SmsDashboardPage() {
 
                 {/* ── Action buttons ── */}
                 <div className="flex flex-col gap-2 pt-2 border-t border-ui-border">
-                  {/* Resend selected */}
                   <button
                     type="button"
                     onClick={handleResendSelected}
