@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
+import Link from "next/link";
 import { Heart, Sparkles, HelpCircle, CheckCircle2, Trash2 } from "lucide-react";
 import { InvitationData, ExcelContact } from "../types";
 import InvitationForm from "../components/InvitationForm";
@@ -175,6 +176,12 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap justify-end">
+            <Link
+              href="/dashboard/sms"
+              className="text-xs font-semibold text-ui-muted hover:text-ui-text transition-colors px-2 py-1.5 rounded-lg hover:bg-ui-bg"
+            >
+              {language === 'sw' ? '📊 Dashibodi ya SMS' : '📊 SMS Dashboard'}
+            </Link>
             <ThemeSwitcher />
             <LanguageSwitcher />
           </div>
