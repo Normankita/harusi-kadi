@@ -71,6 +71,23 @@ interface ProgressPayload {
 
 type WhatsAppStatus = "checking" | "connected" | "disconnected" | "unreachable";
 
+interface DeliveryReport {
+  messageId: string;
+  to: string;
+  status: string;
+  statusId: number;
+  description: string;
+}
+
+const DELIVERY_CATEGORY: Record<number, 'delivered' | 'pending' | 'failed'> = {
+  73: 'delivered',
+  74: 'failed', 75: 'failed', 76: 'failed', 78: 'failed', 79: 'failed',
+  53: 'failed', 54: 'failed', 55: 'failed', 56: 'failed', 57: 'failed', 58: 'failed',
+  50: 'pending', 51: 'pending', 52: 'pending', 77: 'pending', 88: 'pending',
+};
+const deliveryCategory = (id: number): 'delivered' | 'pending' | 'failed' =>
+  DELIVERY_CATEGORY[id] ?? 'pending';
+
 // ─── Swahili date helpers ───────────────────────────────────────────────────
 const formatSwahiliDate = (dateStr: string) => {
   if (!dateStr) return "";
@@ -171,6 +188,29 @@ function buildSmsTemplate(
   return msg;
 }
 
+function buildReminderTemplate(lang: 'sw' | 'en', d: InvitationData): string {
+  const couple = d.jinaLaKijana?.trim() || (lang === 'en' ? 'the couple' : 'maharusi');
+  const method = d.ainaYaMchango?.trim() || 'MPESA';
+  const number = d.nambaYaSimuMchango?.trim() || '';
+  const method2 = d.ainaYaMchangoPili?.trim() || '';
+  const number2 = d.nambaYaSimuMchangoPili?.trim() || '';
+  const accountName = d.jinaLaAkauntiYaMchango?.trim() || '';
+  const deadline = d.mwishoWaKutoaMchango ? formatSwahiliDateShort(d.mwishoWaKutoaMchango) : '';
+
+  if (lang === 'en') {
+    let msg = `Hi {{name}}, this is a gentle reminder to contribute to ${couple}'s upcoming wedding.`;
+    if (number) { msg += ` Please send via ${method}: ${number}`; if (accountName) msg += ` (${accountName})`; msg += '.'; }
+    if (method2 && number2) msg += ` Also via ${method2}: ${number2}.`;
+    if (deadline) msg += ` Deadline: ${deadline}.`;
+    return msg + ` Thank you for your support! 🙏`;
+  }
+  let msg = `Habari {{name}}, tunakukumbusha kutoa mchango wako kwa harusi ya ${couple}.`;
+  if (number) { msg += ` Tuma kwa ${method}: ${number}`; if (accountName) msg += ` (${accountName})`; msg += '.'; }
+  if (method2 && number2) msg += ` Pia kwa ${method2}: ${number2}.`;
+  if (deadline) msg += ` Mwisho wa mchango: ${deadline}.`;
+  return msg + ` Asante sana kwa msaada wako! 🙏`;
+}
+
 function getSmsStats(len: number): { icon: string; colorClass: string; label: string; smsLabel: string } {
   if (len <= 160) return { icon: '✅', colorClass: 'text-emerald-600', label: `${len}/160`, smsLabel: 'SMS 1' };
   if (len <= 306) return { icon: '⚠️', colorClass: 'text-amber-600', label: `${len}/320`, smsLabel: 'SMS 1-2' };
@@ -224,6 +264,24 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
   const [smsFallbackDismissed, setSmsFallbackDismissed] = useState(false);
   const [smsFallbackSending, setSmsFallbackSending] = useState(false);
   const [smsFallbackResult, setSmsFallbackResult] = useState<{ sent: number; failed: number; done: boolean } | null>(null);
+
+  // ── Delivery status state ──────────────────────────────────────────────────
+  const [checkingDelivery, setCheckingDelivery] = useState(false);
+  const [deliveryReports, setDeliveryReports] = useState<DeliveryReport[]>([]);
+  const [showDeliveryReports, setShowDeliveryReports] = useState(false);
+  const [lowBalanceWarning, setLowBalanceWarning] = useState<{ balance: number; needed: number } | null>(null);
+  const proceedDespiteLowBalance = useRef(false);
+
+  // ── Reminder state ────────────────────────────────────────────────────────
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [reminderChannel, setReminderChannel] = useState<'sms' | 'whatsapp'>('sms');
+  const [reminderMessage, setReminderMessage] = useState('');
+  const [reminderMessageEdited, setReminderMessageEdited] = useState(false);
+  const [reminderPhone, setReminderPhone] = useState('');
+  const [reminderPhoneError, setReminderPhoneError] = useState('');
+  const [reminderSending, setReminderSending] = useState(false);
+  const [reminderProgress, setReminderProgress] = useState<{ current: number; total: number } | null>(null);
+  const [reminderResult, setReminderResult] = useState<{ sent: number; failed: number } | null>(null);
 
   // ── SMS style state ────────────────────────────────────────────────────────
   const [smsMessageStyle, setSmsMessageStyle] = useState<SmsStyle>('short');
@@ -585,6 +643,133 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
     setSmsMessageEdited(false);
   }, [excelData]);
 
+  // Auto-fill reminder message when data/language changes (unless user has edited)
+  useEffect(() => {
+    if (reminderMessageEdited) return;
+    setReminderMessage(buildReminderTemplate(language, data));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, language]);
+
+  // ── Send Reminder ─────────────────────────────────────────────────────────
+  const handleSendReminder = async () => {
+    if (!reminderMessage.trim()) return;
+    setReminderResult(null);
+    setReminderProgress(null);
+
+    // Validate phone in single mode
+    if (!hasBulkContacts) {
+      if (!reminderPhone.trim()) {
+        setReminderPhoneError(language === 'en' ? 'Phone number required' : 'Namba ya simu inahitajika');
+        return;
+      }
+      const num = normalizePhone(reminderPhone);
+      if (num.length < 11) {
+        setReminderPhoneError(language === 'en' ? 'Invalid phone number' : 'Namba si sahihi');
+        return;
+      }
+      setReminderPhoneError('');
+
+      setReminderSending(true);
+      if (reminderChannel === 'whatsapp') {
+        window.open(`https://api.whatsapp.com/send?phone=${num}&text=${encodeURIComponent(reminderMessage)}`, '_blank');
+        setReminderResult({ sent: 1, failed: 0 });
+      } else {
+        try {
+          const res = await fetch('/api/sms/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: num, message: reminderMessage, cardType: data.cardType ?? 'invitation' }),
+          });
+          setReminderResult(res.ok ? { sent: 1, failed: 0 } : { sent: 0, failed: 1 });
+        } catch {
+          setReminderResult({ sent: 0, failed: 1 });
+        }
+      }
+      setReminderSending(false);
+      return;
+    }
+
+    // Bulk mode
+    setReminderSending(true);
+    const total = excelData!.length;
+
+    if (reminderChannel === 'sms') {
+      try {
+        const contacts = excelData!.map(c => ({ name: c.originalName || c.name, phone: c.phone }));
+        const res = await fetch('/api/sms/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contacts, message: reminderMessage, cardType: data.cardType ?? 'invitation' }),
+        });
+        const result = await res.json();
+        setReminderResult({ sent: result.sent ?? 0, failed: result.failed ?? 0 });
+      } catch {
+        setReminderResult({ sent: 0, failed: total });
+      }
+      setReminderSending(false);
+      return;
+    }
+
+    // WhatsApp bulk reminder — chunked, no card images, passes custom message
+    const contacts = excelData!.map(c => ({
+      name: c.originalName || c.name,
+      phone: normalizePhone(c.phone),
+      cardImageBase64: '',
+    }));
+    const CHUNK_SIZE = 30;
+    const chunks: (typeof contacts)[] = [];
+    for (let i = 0; i < contacts.length; i += CHUNK_SIZE) chunks.push(contacts.slice(i, i + CHUNK_SIZE));
+
+    let successTotal = 0;
+    let failedTotal = 0;
+
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const chunk = chunks[ci];
+      const chunkSessionId = `reminder_${Date.now()}_${ci}`;
+      setReminderProgress({ current: successTotal + failedTotal, total });
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/send-bulk`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.NEXT_PUBLIC_WHATSAPP_API_KEY || '' },
+          body: JSON.stringify({
+            sessionId: chunkSessionId,
+            contacts: chunk,
+            message: reminderMessage,
+            weddingInfo: { family: data.wafadhili || 'Familia', groomName: data.jinaLaKijana || 'Maharusi' },
+          }),
+        });
+        if (!res.ok) { failedTotal += chunk.length; continue; }
+
+        await new Promise<void>((resolve) => {
+          const iv = setInterval(async () => {
+            try {
+              const pr = await fetch(`${BACKEND_URL}/progress/${chunkSessionId}`, {
+                headers: { 'x-api-key': process.env.NEXT_PUBLIC_WHATSAPP_API_KEY || '' },
+                signal: AbortSignal.timeout(5000),
+              });
+              if (!pr.ok) return;
+              const json: ProgressPayload = await pr.json();
+              setReminderProgress({ current: successTotal + failedTotal + (json.sent ?? 0), total });
+              if (json.done) {
+                clearInterval(iv);
+                successTotal += json.success ?? 0;
+                failedTotal += json.failed ?? 0;
+                resolve();
+              }
+            } catch { /* ignore */ }
+          }, 2000);
+        });
+      } catch {
+        failedTotal += chunk.length;
+      }
+    }
+
+    setReminderProgress(null);
+    setReminderResult({ sent: successTotal, failed: failedTotal });
+    setReminderSending(false);
+  };
+
   // ── Download failed contacts as Excel ────────────────────────────────────
   const downloadFailedContacts = () => {
     if (!failures.length) return;
@@ -641,9 +826,43 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
     }
   };
 
+  // ── Check SMS delivery reports ────────────────────────────────────────────
+  const checkSmsDelivery = async () => {
+    setCheckingDelivery(true);
+    try {
+      const sender = data.cardType === 'contribution' ? 'MICHANGO' : 'HARUSI';
+      const res = await fetch(`/api/sms/reports?sender=${sender}&size=100`);
+      const result = await res.json();
+      if (result.success) {
+        setDeliveryReports(result.reports);
+        setShowDeliveryReports(true);
+      }
+    } catch (err) {
+      console.error('Failed to check delivery:', err);
+    } finally {
+      setCheckingDelivery(false);
+    }
+  };
+
   // ── SMS bulk send ──────────────────────────────────────────────────────────
   const handleBulkSMSSend = async () => {
     if (!excelData || excelData.length === 0 || !smsBulkMessage.trim()) return;
+
+    // Balance check — skip if user already confirmed low-balance warning
+    if (!proceedDespiteLowBalance.current) {
+      const estimatedCost = excelData.length * (smsBulkMessage.length > 160 ? 32 : 16);
+      try {
+        const res = await fetch('/api/sms/balance');
+        const result = await res.json();
+        if (result.success && typeof result.balance === 'number' && result.balance < estimatedCost) {
+          setLowBalanceWarning({ balance: result.balance, needed: estimatedCost });
+          return;
+        }
+      } catch { /* fail open — don't block sending */ }
+    }
+    proceedDespiteLowBalance.current = false;
+    setLowBalanceWarning(null);
+
     setSmsBulkSending(true);
     setSmsBulkResult(null);
     try {
@@ -1236,6 +1455,36 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                     </span>
                   </div>
 
+                  {/* Low-balance warning — shown before send if balance is insufficient */}
+                  {lowBalanceWarning && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-3 space-y-2 text-xs animate-toast-in">
+                      <p className="flex items-start gap-2 text-red-800 font-semibold">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-red-600" />
+                        {language === 'en'
+                          ? `Warning: Your balance is TZS ${lowBalanceWarning.balance.toLocaleString()} but you need approx. TZS ${lowBalanceWarning.needed.toLocaleString()} to send these SMS. Some messages may not go through.`
+                          : `Onyo: Salio lako ni TZS ${lowBalanceWarning.balance.toLocaleString()} lakini unahitaji takriban TZS ${lowBalanceWarning.needed.toLocaleString()} kutuma SMS hizi. Baadhi ya ujumbe huenda usitumwe.`}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { proceedDespiteLowBalance.current = true; handleBulkSMSSend(); }}
+                          className="flex-1 py-2 px-3 rounded-lg bg-red-100 hover:bg-red-200 text-red-800 font-bold text-[11px] transition-all cursor-pointer"
+                        >
+                          {language === 'en' ? 'Proceed Anyway' : 'Endelea Hata Hivyo'}
+                        </button>
+                        <a
+                          href="https://app.nextsms.co.tz"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setLowBalanceWarning(null)}
+                          className="flex-1 py-2 px-3 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-[11px] transition-all cursor-pointer text-center"
+                        >
+                          {language === 'en' ? 'Cancel — Add Balance' : 'Ghairi — Ongeza Salio'}
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
                   <button
                     type="button"
                     onClick={handleBulkSMSSend}
@@ -1250,7 +1499,7 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                   </button>
 
                   {smsBulkResult?.done && (
-                    <div className="rounded-xl border border-ui-border p-3 space-y-1 text-xs animate-toast-in">
+                    <div className="rounded-xl border border-ui-border p-3 space-y-2 text-xs animate-toast-in">
                       <p className="flex items-center gap-1.5 text-emerald-700 font-semibold">
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         {tr('smsSentCount', { count: smsBulkResult.sent })}
@@ -1261,6 +1510,15 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                           {tr('smsFailedCount', { count: smsBulkResult.failed })}
                         </p>
                       )}
+                      <button
+                        type="button"
+                        onClick={checkSmsDelivery}
+                        disabled={checkingDelivery}
+                        className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 hover:text-amber-900 border border-amber-200 hover:border-amber-400 hover:bg-amber-50 rounded-lg px-2.5 py-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {checkingDelivery ? <Loader2 className="w-3 h-3 animate-spin" /> : '🔍'}
+                        {language === 'en' ? 'Check Delivery Status' : 'Angalia Hali ya Kufikishwa'}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1341,10 +1599,21 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                   </button>
 
                   {smsSingleResult === "success" && (
-                    <p className="text-emerald-600 text-xs font-semibold flex items-center gap-1.5 animate-toast-in">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      {tr('smsSentOk')}
-                    </p>
+                    <div className="space-y-2 animate-toast-in">
+                      <p className="text-emerald-600 text-xs font-semibold flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {tr('smsSentOk')}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={checkSmsDelivery}
+                        disabled={checkingDelivery}
+                        className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 hover:text-amber-900 border border-amber-200 hover:border-amber-400 hover:bg-amber-50 rounded-lg px-2.5 py-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {checkingDelivery ? <Loader2 className="w-3 h-3 animate-spin" /> : '🔍'}
+                        {language === 'en' ? 'Check Delivery Status' : 'Angalia Hali ya Kufikishwa'}
+                      </button>
+                    </div>
                   )}
                   {smsSingleResult === "error" && (
                     <p className="text-red-500 text-xs flex items-center gap-1.5 animate-toast-in">
@@ -1354,6 +1623,91 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                   )}
                 </div>
               )}
+
+              {/* Delivery Reports Panel */}
+              {showDeliveryReports && (() => {
+                const delivered = deliveryReports.filter(r => deliveryCategory(r.statusId) === 'delivered');
+                const pending   = deliveryReports.filter(r => deliveryCategory(r.statusId) === 'pending');
+                const failed    = deliveryReports.filter(r => deliveryCategory(r.statusId) === 'failed');
+                const hasInsufficientBalance = deliveryReports.some(r => r.statusId === 57);
+                return (
+                  <div className="rounded-xl border border-ui-border overflow-hidden animate-toast-in">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-3 py-2.5 bg-ui-bg border-b border-ui-border">
+                      <h5 className="text-xs font-bold text-ui-text">
+                        {language === 'en' ? 'SMS Delivery Status' : 'Hali ya Kufikishwa SMS'}
+                      </h5>
+                      <button type="button" onClick={() => setShowDeliveryReports(false)} className="text-ui-muted hover:text-ui-text transition-colors cursor-pointer">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* One-time retrieval note */}
+                    <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 text-[10px] text-amber-800 flex items-start gap-1.5">
+                      <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                      {language === 'en'
+                        ? 'Note: Reports can only be retrieved once — they won\'t appear again in future checks.'
+                        : 'Kumbuka: Ripoti hizi zinaweza kuangaliwa mara moja tu — hazitaonekana tena.'}
+                    </div>
+
+                    {/* Insufficient balance warning */}
+                    {hasInsufficientBalance && (
+                      <div className="px-3 py-2.5 bg-red-50 border-b border-red-100 space-y-1.5">
+                        <p className="text-xs text-red-800 font-semibold flex items-start gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-red-600" />
+                          {language === 'en'
+                            ? 'Some SMS were not sent due to insufficient balance. Please top up your NextSMS account.'
+                            : 'Baadhi ya SMS hazikutumwa kwa sababu ya salio kuwa chini. Tafadhali ongeza salio kwenye akaunti yako ya NextSMS.'}
+                        </p>
+                        <a
+                          href="https://app.nextsms.co.tz"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-5 text-[11px] text-red-600 underline font-semibold flex items-center gap-1"
+                        >
+                          {language === 'en' ? 'Open NextSMS Dashboard ↗' : 'Fungua NextSMS Dashboard ↗'}
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Summary counts */}
+                    <div className="grid grid-cols-3 divide-x divide-ui-border border-b border-ui-border text-center">
+                      {[
+                        { label: language === 'en' ? 'Delivered' : 'Imefika',  count: delivered.length, color: 'text-emerald-600' },
+                        { label: language === 'en' ? 'Pending'   : 'Inasubiri', count: pending.length,   color: 'text-amber-600'   },
+                        { label: language === 'en' ? 'Failed'    : 'Haikufika', count: failed.length,    color: 'text-red-600'     },
+                      ].map(({ label, count, color }) => (
+                        <div key={label} className="py-2 px-1">
+                          <p className="text-[10px] text-ui-muted">{label}</p>
+                          <p className={`text-sm font-bold ${color}`}>{count}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Report list */}
+                    <div className="max-h-52 overflow-y-auto divide-y divide-ui-border">
+                      {deliveryReports.length === 0 ? (
+                        <p className="p-4 text-xs text-ui-muted text-center">
+                          {language === 'en' ? 'No reports available yet.' : 'Hakuna ripoti zinazopatikana bado.'}
+                        </p>
+                      ) : deliveryReports.map((r, i) => {
+                        const cat = deliveryCategory(r.statusId);
+                        return (
+                          <div key={`${r.messageId}-${i}`} className="flex items-center justify-between px-3 py-2 gap-2">
+                            <span className="text-[11px] text-ui-muted font-mono shrink-0">{r.to}</span>
+                            <span className={`text-[10px] font-semibold flex items-center gap-1 text-right ${
+                              cat === 'delivered' ? 'text-emerald-600' : cat === 'failed' ? 'text-red-600' : 'text-amber-600'
+                            }`}>
+                              {cat === 'delivered' ? '✅' : cat === 'failed' ? '❌' : '⏳'}
+                              {r.status}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Disclaimer */}
               <div className="rounded-xl border border-ui-border overflow-hidden">
@@ -1397,6 +1751,175 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
             </div>
           );
         })()}
+      </div>
+
+      {/* ═══════════════════════════════════════════════════
+          REMINDER SECTION
+      ═══════════════════════════════════════════════════ */}
+      <div className="border-t border-ui-border pt-5 space-y-3">
+        <button
+          type="button"
+          onClick={() => { setReminderOpen(o => !o); setReminderResult(null); }}
+          className="w-full flex items-center justify-between text-left group"
+        >
+          <h4 className="text-sm font-bold text-ui-text flex items-center gap-2 group-hover:text-amber-700 transition-colors">
+            <span className="text-base">🔔</span>
+            {language === 'en' ? 'Reminder' : 'Kikumbusha'}
+            <span className="text-[10px] font-normal text-ui-muted">
+              {language === 'en' ? '— contributions / event' : '— mchango / sherehe'}
+            </span>
+          </h4>
+          <ChevronDown className={`w-4 h-4 text-ui-muted transition-transform duration-200 ${reminderOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {reminderOpen && (
+          <div className="space-y-4 pt-1">
+            {/* Channel picker */}
+            <div className="grid grid-cols-2 gap-2">
+              {(['sms', 'whatsapp'] as const).map(ch => (
+                <button
+                  key={ch}
+                  type="button"
+                  onClick={() => { setReminderChannel(ch); setReminderResult(null); }}
+                  className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    reminderChannel === ch
+                      ? ch === 'sms'
+                        ? 'border-amber-500 bg-amber-50 text-amber-800'
+                        : 'border-emerald-500 bg-emerald-50 text-emerald-800'
+                      : 'border-ui-border bg-ui-card text-ui-muted hover:border-stone-300'
+                  }`}
+                >
+                  {ch === 'sms' ? '📩 SMS' : '💬 WhatsApp'}
+                </button>
+              ))}
+            </div>
+
+            {/* WhatsApp bulk warning if disconnected */}
+            {reminderChannel === 'whatsapp' && hasBulkContacts && waStatus !== 'connected' && (
+              <div className="flex gap-2 p-2.5 rounded-xl bg-orange-50 border border-orange-200 text-orange-800 text-xs">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>{language === 'en' ? 'WhatsApp is not connected. Connect first in the section below.' : 'WhatsApp haijaunganishwa. Unganisha kwanza katika sehemu iliyo chini.'}</span>
+              </div>
+            )}
+
+            {/* Recipient info / phone input */}
+            {hasBulkContacts ? (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-ui-bg border border-ui-border text-xs text-ui-muted">
+                <Users className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                <span>
+                  {language === 'en'
+                    ? `Sending to ${excelData!.length} contact${excelData!.length !== 1 ? 's' : ''} from your Excel list`
+                    : `Itatumia kwa watu ${excelData!.length} kutoka kwenye orodha yako`}
+                </span>
+              </div>
+            ) : (
+              <div className="relative">
+                <input
+                  type="text"
+                  value={reminderPhone}
+                  onChange={e => { setReminderPhone(e.target.value); setReminderPhoneError(''); setReminderResult(null); }}
+                  placeholder={language === 'en' ? 'Phone number (e.g. 0754123456)' : 'Namba ya simu (mfano 0754123456)'}
+                  className="w-full text-xs px-3.5 py-3 rounded-xl border border-ui-border bg-ui-card text-ui-text focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all pl-9"
+                />
+                <Smartphone className="absolute left-3 top-3.5 w-3.5 h-3.5 text-ui-muted" />
+                {reminderPhoneError && (
+                  <p className="text-red-500 text-xs flex items-center gap-1 mt-1 animate-toast-in">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {reminderPhoneError}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Message textarea */}
+            <div className="space-y-1">
+              <textarea
+                rows={6}
+                value={reminderMessage}
+                onChange={e => { setReminderMessage(e.target.value.slice(0, 640)); setReminderMessageEdited(true); setReminderResult(null); }}
+                placeholder={language === 'en' ? 'Type your reminder message…' : 'Andika ujumbe wa kikumbusha…'}
+                className="w-full text-sm px-3.5 py-3 rounded-xl border border-stone-200 bg-white text-ui-text focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none transition-all resize-y"
+              />
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => { setReminderMessage(buildReminderTemplate(language, data)); setReminderMessageEdited(false); }}
+                  className="text-[10px] text-amber-600 hover:text-amber-800 font-semibold underline underline-offset-2 cursor-pointer"
+                >
+                  ↺ {language === 'en' ? 'Reset to template' : 'Rejesha mfano'}
+                </button>
+                <span className="text-[10px] text-ui-muted font-mono">{reminderMessage.length}/640</span>
+              </div>
+              <p className="text-[10px] text-ui-muted">
+                {language === 'en'
+                  ? '{{name}} is replaced with each recipient\'s name automatically.'
+                  : '{{name}} inabadilishwa kiotomatiki na jina la mtu anayepokea.'}
+              </p>
+            </div>
+
+            {/* Progress (WhatsApp bulk only) */}
+            {reminderSending && reminderProgress && (
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[10px] text-ui-muted font-mono">
+                  <span>{language === 'en' ? 'Sending…' : 'Inatuma…'}</span>
+                  <span>{reminderProgress.current}/{reminderProgress.total}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-ui-bg overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                    style={{ width: `${(reminderProgress.current / reminderProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Result banner */}
+            {reminderResult && (
+              <div className={`flex items-start gap-2 p-3 rounded-xl border text-xs animate-toast-in ${
+                reminderResult.failed === 0
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : reminderResult.sent === 0
+                  ? 'bg-red-50 border-red-200 text-red-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-800'
+              }`}>
+                {reminderResult.failed === 0
+                  ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  : <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+                <span>
+                  {reminderResult.sent > 0 && (language === 'en' ? `${reminderResult.sent} sent successfully.` : `${reminderResult.sent} zimetumwa.`)}
+                  {reminderResult.failed > 0 && ` ${language === 'en' ? `${reminderResult.failed} failed.` : `${reminderResult.failed} zimeshindwa.`}`}
+                </span>
+              </div>
+            )}
+
+            {/* Send button */}
+            <button
+              type="button"
+              onClick={handleSendReminder}
+              disabled={reminderSending || !reminderMessage.trim() || (reminderChannel === 'whatsapp' && hasBulkContacts && waStatus !== 'connected')}
+              className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm transition-all shadow-sm active:scale-[0.98] cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                reminderChannel === 'sms'
+                  ? 'bg-amber-500 hover:bg-amber-600 text-white disabled:bg-stone-300'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-stone-300'
+              }`}
+            >
+              {reminderSending ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> {language === 'en' ? 'Sending…' : 'Inatuma…'}</>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 rotate-45" />
+                  {hasBulkContacts
+                    ? (language === 'en'
+                        ? `Send Reminder to ${excelData!.length} contacts via ${reminderChannel === 'sms' ? 'SMS' : 'WhatsApp'}`
+                        : `Tuma Kikumbusha kwa watu ${excelData!.length} via ${reminderChannel === 'sms' ? 'SMS' : 'WhatsApp'}`)
+                    : (language === 'en'
+                        ? `Send via ${reminderChannel === 'sms' ? 'SMS' : 'WhatsApp'}`
+                        : `Tuma via ${reminderChannel === 'sms' ? 'SMS' : 'WhatsApp'}`)}
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════
@@ -1902,7 +2425,7 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                   )}
 
                   {smsFallbackResult !== null && (
-                    <div className="rounded-xl border border-stone-200 p-3 space-y-1 text-xs animate-toast-in">
+                    <div className="rounded-xl border border-stone-200 p-3 space-y-2 text-xs animate-toast-in">
                       <p className="flex items-center gap-1.5 text-emerald-700 font-semibold">
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         {tr('smsFallbackSentResult', { count: smsFallbackResult.sent })}
@@ -1913,6 +2436,15 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
                           {tr('smsFallbackFailedResult', { count: smsFallbackResult.failed })}
                         </p>
                       )}
+                      <button
+                        type="button"
+                        onClick={checkSmsDelivery}
+                        disabled={checkingDelivery}
+                        className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 hover:text-amber-900 border border-amber-200 hover:border-amber-400 hover:bg-amber-50 rounded-lg px-2.5 py-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {checkingDelivery ? <Loader2 className="w-3 h-3 animate-spin" /> : '🔍'}
+                        {language === 'en' ? 'Check Delivery Status' : 'Angalia Hali ya Kufikishwa'}
+                      </button>
                     </div>
                   )}
 

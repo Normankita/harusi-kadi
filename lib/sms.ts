@@ -161,6 +161,81 @@ export async function sendBulkSMS({
   }
 }
 
+export interface DeliveryReport {
+  messageId: string;
+  to: string;
+  status: string;
+  statusId: number;
+  description: string;
+}
+
+const STATUS_MAP: Record<number, { label: string; category: 'delivered' | 'pending' | 'failed' }> = {
+  73: { label: 'Imefika', category: 'delivered' },
+  74: { label: 'Muda umepita / Simu imezimwa', category: 'failed' },
+  75: { label: 'Imefutwa', category: 'failed' },
+  76: { label: 'Haikufika - tatizo la mtandao', category: 'failed' },
+  77: { label: 'Imekubaliwa', category: 'pending' },
+  78: { label: 'Hitilafu isiyojulikana', category: 'failed' },
+  79: { label: 'Imekataliwa', category: 'failed' },
+  50: { label: 'Inasubiri uthibitisho', category: 'pending' },
+  51: { label: 'Imetumwa', category: 'pending' },
+  52: { label: 'Imekubaliwa, inasindikwa', category: 'pending' },
+  53: { label: 'Mtandao haupo kwenye huduma', category: 'failed' },
+  54: { label: 'Namba si sahihi', category: 'failed' },
+  55: { label: 'Mpokeaji ame-block ujumbe', category: 'failed' },
+  56: { label: 'Sender ID haijasajiliwa', category: 'failed' },
+  57: { label: 'Salio halitoshi - lipa zaidi', category: 'failed' },
+  58: { label: 'Sender ID haijasajiliwa kwenye mtandao', category: 'failed' },
+  88: { label: 'Inasindikwa', category: 'pending' },
+};
+
+export async function getDeliveryReports(params?: {
+  sender?: string;
+  messageId?: string;
+  sentSince?: string;
+  sentUntil?: string;
+  size?: number;
+}): Promise<{ success: boolean; reports: DeliveryReport[]; error?: string }> {
+  try {
+    const query = new URLSearchParams();
+    if (params?.sender) query.set('sender', params.sender);
+    if (params?.messageId) query.set('messageId', params.messageId);
+    if (params?.sentSince) query.set('sentSince', params.sentSince);
+    if (params?.sentUntil) query.set('sentUntil', params.sentUntil);
+    query.set('size', String(params?.size || 100));
+
+    const res = await fetch(`${BASE_URL}/api/v2/reports?${query.toString()}`, {
+      headers: { Authorization: getAuthHeader(), Accept: 'application/json' },
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, reports: [], error: data?.message || `HTTP ${res.status}` };
+    }
+
+    const results: Record<string, unknown>[] = data?.results || [];
+    const reports: DeliveryReport[] = results.map(r => {
+      const statusId = r.id as number;
+      const statusInfo = STATUS_MAP[statusId] || { label: 'Hali isiyojulikana', category: 'pending' };
+      return {
+        messageId: r.messageId as string,
+        to: (r.to || r.recipient || '') as string,
+        status: statusInfo.label,
+        statusId,
+        description: statusInfo.label,
+      };
+    });
+
+    return { success: true, reports };
+  } catch (err) {
+    return { success: false, reports: [], error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export function getStatusCategory(statusId: number): 'delivered' | 'pending' | 'failed' {
+  return STATUS_MAP[statusId]?.category || 'pending';
+}
+
 export async function checkBalance(): Promise<SMSBalanceResult> {
   try {
     const res = await fetch(`${BASE_URL}/api/v2/balance`, {
