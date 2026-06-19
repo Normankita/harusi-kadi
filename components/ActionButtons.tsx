@@ -364,8 +364,10 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
           allowTaint: true,
         });
 
-        // JPEG at 0.8 quality is ~8-10x smaller than PNG — critical for large contact lists
-        const imageBase64 = canvas.toDataURL("image/jpeg", 0.8);
+        // JPEG at 0.8 quality is ~8-10x smaller than PNG — critical for large contact lists.
+        // Strip the data URL prefix ("data:image/jpeg;base64,") — whatsapp-web.js calls atob()
+        // directly on this string and atob() only accepts raw base64 without the prefix.
+        const imageBase64 = canvas.toDataURL("image/jpeg", 0.8).split(',')[1] ?? '';
 
         // Free GPU/canvas memory immediately — don't hold 350 canvases at once
         canvas.width = 0;
