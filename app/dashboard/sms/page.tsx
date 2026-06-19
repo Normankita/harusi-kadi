@@ -300,6 +300,17 @@ export default function SmsDashboardPage() {
   const [loadingCrossCheck, setLoadingCrossCheck] = useState(false);
   const [crossCheckError, setCrossCheckError] = useState<string | null>(null);
 
+  // ── Status enrichment state ───────────────────────────────────────────────
+  const [enrichResult, setEnrichResult] = useState<{
+    name: string;
+    phone: string;
+    status: 'sent' | 'failed' | 'never_attempted';
+    reason: string | null;
+    attemptCount: number;
+  }[] | null>(null);
+  const [enrichLoading, setEnrichLoading] = useState(false);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+
   // ── Load batches ──────────────────────────────────────────────────────────
   const loadBatches = useCallback(async () => {
     setLoading(true);
@@ -549,6 +560,69 @@ export default function SmsDashboardPage() {
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Status enrichment ─────────────────────────────────────────────────────
+  const handleEnrichUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEnrichError(null);
+    setEnrichResult(null);
+    setEnrichLoading(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const contacts = parseExcelContacts(buffer);
+      if (contacts.length === 0) throw new Error(sw ? 'Hakuna data iliyopatikana' : 'No contacts found in file');
+      const phones = contacts.map(c => c.phone);
+      const res = await fetch(`${BACKEND_URL}/sms/recipients/status-lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+        body: JSON.stringify({ phones }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setEnrichResult(contacts.map(c => ({
+        name: c.name,
+        phone: c.phone,
+        status: data.results[c.phone]?.status ?? 'never_attempted',
+        reason: data.results[c.phone]?.reason ?? null,
+        attemptCount: data.results[c.phone]?.attemptCount ?? 0,
+      })));
+    } catch (err) {
+      setEnrichError(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setEnrichLoading(false);
+      e.target.value = '';
+    }
+  };
+
+  const exportEnrichedReport = () => {
+    if (!enrichResult) return;
+    const statusLabel = (s: string) => {
+      if (s === 'sent') return 'Imetumwa';
+      if (s === 'failed') return 'Imeshindwa';
+      return 'Haijajaribiwa Kabisa';
+    };
+    const wb = XLSX.utils.book_new();
+    const rows = [
+      ['S/N', 'Jina', 'Simu', 'Hali', 'Sababu', 'Idadi ya Majaribio'],
+      ...enrichResult.map((r, i) => [
+        i + 1, r.name, r.phone, statusLabel(r.status), r.reason || '-', r.attemptCount,
+      ]),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 6 }, { wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 20 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Ripoti ya Hali');
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([out], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Ripoti_ya_Hali_${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1145,6 +1219,93 @@ export default function SmsDashboardPage() {
                 </div>
               </div>
             )}
+            {/* ─── Status enrichment section ──────────────────────────────── */}
+            <div className="bg-ui-card rounded-2xl border border-ui-border p-5 space-y-4">
+              <div className="space-y-1.5">
+                <h2 className="text-sm font-bold text-ui-text">
+                  {sw ? '📋 Pakua Ripoti Kamili ya Hali' : '📋 Download Full Status Report'}
+                </h2>
+                <p className="text-xs text-ui-muted leading-relaxed">
+                  {sw
+                    ? 'Pakia Excel yako ili kupata ripoti kamili yenye majina, hali (imetumwa / imeshindwa / haijajaribiwa), na sababu za kushindwa kwa kila mtu.'
+                    : 'Upload your Excel to get a full report with real names, status (sent / failed / never attempted), and failure reasons for every contact.'}
+                </p>
+              </div>
+
+              <label className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 border-dashed cursor-pointer transition-all text-xs font-bold ${
+                enrichLoading
+                  ? 'border-stone-200 bg-stone-50 text-stone-400 cursor-not-allowed'
+                  : 'border-stone-300 bg-stone-50 hover:bg-stone-100 text-stone-700'
+              }`}>
+                {enrichLoading
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> {sw ? 'Inachunguza...' : 'Looking up...'}</>
+                  : <><Download className="w-4 h-4 rotate-180" /> {sw ? 'Chagua Faili la Excel' : 'Choose Excel File'}</>
+                }
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  disabled={enrichLoading}
+                  onChange={handleEnrichUpload}
+                />
+              </label>
+
+              {enrichError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{enrichError}</span>
+                </div>
+              )}
+
+              {enrichResult && (() => {
+                const sentCount = enrichResult.filter(r => r.status === 'sent').length;
+                const failedCount = enrichResult.filter(r => r.status === 'failed').length;
+                const neverCount = enrichResult.filter(r => r.status === 'never_attempted').length;
+                return (
+                  <div className="space-y-3">
+                    {/* Summary */}
+                    <div className="grid grid-cols-4 gap-2">
+                      <div className="rounded-xl border border-ui-border bg-ui-bg p-2.5 text-center space-y-0.5">
+                        <p className="text-base font-bold text-ui-text">{enrichResult.length}</p>
+                        <p className="text-[10px] text-ui-muted font-semibold">{sw ? 'Jumla' : 'Total'}</p>
+                      </div>
+                      <div className="rounded-xl border border-green-200 bg-green-50 p-2.5 text-center space-y-0.5">
+                        <p className="text-base font-bold text-green-700">{sentCount}</p>
+                        <p className="text-[10px] text-green-700 font-semibold">{sw ? 'Imetumwa' : 'Sent'}</p>
+                      </div>
+                      <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-center space-y-0.5">
+                        <p className="text-base font-bold text-red-700">{failedCount}</p>
+                        <p className="text-[10px] text-red-600 font-semibold">{sw ? 'Imeshindwa' : 'Failed'}</p>
+                      </div>
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-center space-y-0.5">
+                        <p className="text-base font-bold text-amber-700">{neverCount}</p>
+                        <p className="text-[10px] text-amber-700 font-semibold">{sw ? 'Haijajaribiwa' : 'Never tried'}</p>
+                      </div>
+                    </div>
+
+                    {/* Download button */}
+                    <button
+                      type="button"
+                      onClick={exportEnrichedReport}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-stone-700 hover:bg-stone-800 text-white font-bold text-xs transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      {sw
+                        ? `📥 Pakua Ripoti Kamili (${enrichResult.length} watu)`
+                        : `📥 Download Full Status Report (${enrichResult.length} contacts)`}
+                    </button>
+
+                    {/* Upload another */}
+                    <label className="flex items-center gap-1.5 text-xs text-ui-muted hover:text-ui-text font-semibold cursor-pointer transition-colors w-fit pt-1">
+                      <RefreshCw className="w-3 h-3" />
+                      {sw ? 'Pakia faili jingine' : 'Upload another file'}
+                      <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleEnrichUpload} />
+                    </label>
+                  </div>
+                );
+              })()}
+            </div>
+
           </div>
         )}
       </main>
