@@ -106,6 +106,20 @@ const formatTime = (seconds: number): string => {
   return s > 0 ? `${m}dk ${s}s` : `${m} dakika`;
 };
 
+// ─── Browser notification helper ────────────────────────────────────────────
+// Fires a desktop notification only when the tab is hidden (user switched away).
+function fireNotification(title: string, body: string) {
+  if (typeof window === 'undefined') return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  if (!document.hidden) return;
+  try {
+    new Notification(title, { body, icon: '/favicon.ico' });
+  } catch {
+    // iOS Safari and some sandboxed environments throw even when the API exists
+  }
+}
+
 // ─── SMS style types & helpers ──────────────────────────────────────────────
 type SmsStyle = 'short' | 'detailed';
 
@@ -165,6 +179,8 @@ function getSmsStats(len: number): { icon: string; colorClass: string; label: st
 
 export default function ActionButtons({ data, cardRef, excelData, onUpdateData }: ActionButtonsProps) {
   const { language, tr } = useLanguage();
+  const languageRef = useRef(language);
+  useEffect(() => { languageRef.current = language; }, [language]);
 
   // ── Export states ──────────────────────────────────────────────────────────
   const [isImageExporting, setIsImageExporting] = useState(false);
@@ -263,6 +279,12 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
     setIsSending(false);
     setCaptureProgress(null);
     setSendingProgress(prev => prev ? { ...prev, done: true, current: '' } : null);
+    fireNotification(
+      language === 'en' ? 'Send cancelled' : 'Kutuma kumesimamishwa',
+      language === 'en'
+        ? 'WhatsApp bulk send was stopped by user.'
+        : 'Utumaji wa WhatsApp umesimamishwa na mtumiaji.'
+    );
   };
 
   const closeModal = () => {
@@ -276,21 +298,6 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
     cancelRef.current = false;
   };
 
-  // ── Poll send progress ────────────────────────────────────────────────────
-  const pollProgress = useCallback(async (sessionId: string) => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/progress/${sessionId}`, { headers: { 'x-api-key': process.env.NEXT_PUBLIC_WHATSAPP_API_KEY || '' }, signal: AbortSignal.timeout(5000) });
-      if (!res.ok) return;
-      const json: ProgressPayload = await res.json();
-      setSendingProgress(json);
-      if (json.done) {
-        stopPolling();
-        setIsSending(false);
-      }
-    } catch {
-      // ignore transient errors during polling
-    }
-  }, []);
 
   // ── Normalize a phone number to international format (255XXXXXXXXX) ────────
   const normalizePhone = (phone: string): string => {
@@ -311,6 +318,11 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
       name: c.name,
       phone: normalizePhone(c.phone),
     }));
+
+    // Request notification permission now — must be inside a user-gesture handler
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission(); // fire-and-forget, don't block send
+    }
 
     // Reset cancel state and open the modal immediately
     cancelRef.current = false;
@@ -372,7 +384,6 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
       }
     } catch (captureErr) {
       console.error("Card capture failed:", captureErr);
-      // Restore original name before bailing out
       onUpdateData(prev => ({ ...prev, jinaLaMwalikwa: originalName }));
       setCaptureProgress(null);
       setSendingProgress({
@@ -388,6 +399,12 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
           reason: "Imeshindwa kuandaa picha ya kadi",
         })),
       });
+      fireNotification(
+        language === 'en' ? 'Preparation failed ✗' : 'Kuandaa kumeshindwa ✗',
+        language === 'en'
+          ? 'Failed to prepare card images. Please try again.'
+          : 'Imeshindwa kuandaa picha za kadi. Tafadhali jaribu tena.'
+      );
       return;
     }
 
@@ -398,75 +415,155 @@ export default function ActionButtons({ data, cardRef, excelData, onUpdateData }
     // If user cancelled during image capture, bail out
     if (cancelRef.current) {
       setSendingProgress(prev => prev ? { ...prev, done: true, current: '' } : null);
+      fireNotification(
+        language === 'en' ? 'Send cancelled' : 'Kutuma kumesimamishwa',
+        language === 'en'
+          ? `WhatsApp send was stopped after preparing ${contactsWithImages.length} card(s).`
+          : `Utumaji umesimamishwa baada ya kuandaa kadi ${contactsWithImages.length}.`
+      );
       return;
     }
 
-    // ── Step 2: Start sending phase ──────────────────────────────────────────
-    setSendingProgress({
-      sent: 0,
-      total: contactsWithImages.length,
-      current: contactsWithImages[0]?.name || "",
-      success: 0,
-      failed: 0,
-      done: false,
-      failures: [],
-    });
-    setIsSending(true);
+    fireNotification(
+      language === 'en' ? 'Cards ready — sending now…' : 'Kadi ziko tayari — inatuma…',
+      language === 'en'
+        ? `${contactsWithImages.length} card(s) prepared. WhatsApp messages are now being sent.`
+        : `Kadi ${contactsWithImages.length} zimeandaliwa. Ujumbe wa WhatsApp unatumwa sasa.`
+    );
 
-    // ── Step 3: POST to backend with per-contact images ──────────────────────
-    try {
-      const res = await fetch(`${BACKEND_URL}/send-bulk`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", 'x-api-key': process.env.NEXT_PUBLIC_WHATSAPP_API_KEY || '' },
-        body: JSON.stringify({
-          sessionId,
-          contacts: contactsWithImages,   // each contact has its own cardImageBase64
-          cardImageBase64: contactsWithImages[0]?.cardImageBase64 || "", // Fallback at root for older backends
-          weddingInfo: {
-            family: data.wafadhili || "Familia",
-            groomName: data.jinaLaKijana || "Maharusi",
-            brideName: data.jinaLaKijana || "",
-            weddingDate: data.tareheYaNdoa || "",
-            venue: data.mahaliPaNdoa || "",
-          },
-        }),
+    // ── Step 2 & 3: Send in chunks to stay under the backend body-size limit ──
+    // Each chunk is a separate /send-bulk call with its own sessionId.
+    // 30 contacts × ~50KB JPEG ≈ 1.5MB per POST — well under typical limits.
+    const CHUNK_SIZE = 30;
+    const chunks: (typeof contactsWithImages)[] = [];
+    for (let i = 0; i < contactsWithImages.length; i += CHUNK_SIZE) {
+      chunks.push(contactsWithImages.slice(i, i + CHUNK_SIZE));
+    }
+
+    setIsSending(true);
+    let successTotal = 0;
+    let failedTotal = 0;
+    const allFailures: FailedContact[] = [];
+
+    const weddingInfo = {
+      family: data.wafadhili || "Familia",
+      groomName: data.jinaLaKijana || "Maharusi",
+      brideName: data.jinaLaKijana || "",
+      weddingDate: data.tareheYaNdoa || "",
+      venue: data.mahaliPaNdoa || "",
+    };
+
+    for (let ci = 0; ci < chunks.length; ci++) {
+      if (cancelRef.current) break;
+
+      const chunk = chunks[ci];
+      const chunkSessionId = `${sessionId}_${ci}`;
+      sessionIdRef.current = chunkSessionId;
+
+      setSendingProgress({
+        sent: successTotal + failedTotal,
+        total: contactsWithImages.length,
+        current: chunk[0]?.name || "",
+        success: successTotal,
+        failed: failedTotal,
+        done: false,
+        failures: allFailures,
       });
 
-      if (!res.ok) {
-        let errBody = "";
-        try {
-          const ct = res.headers.get("content-type") || "";
-          errBody = ct.includes("json")
-            ? JSON.stringify(await res.json())
-            : await res.text();
-        } catch {
-          errBody = "(hakuna maelezo ya hitilafu)";
+      // POST this chunk
+      try {
+        const res = await fetch(`${BACKEND_URL}/send-bulk`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", 'x-api-key': process.env.NEXT_PUBLIC_WHATSAPP_API_KEY || '' },
+          body: JSON.stringify({
+            sessionId: chunkSessionId,
+            contacts: chunk,
+            cardImageBase64: chunk[0]?.cardImageBase64 || "",
+            weddingInfo,
+          }),
+        });
+
+        if (!res.ok) {
+          let errBody = "";
+          try {
+            const ct = res.headers.get("content-type") || "";
+            errBody = ct.includes("json") ? JSON.stringify(await res.json()) : await res.text();
+          } catch { errBody = "(hakuna maelezo)"; }
+          throw new Error(`HTTP ${res.status}: ${errBody}`);
         }
-        console.error(`Bulk send HTTP ${res.status}:`, errBody);
-        throw new Error(`HTTP ${res.status}: ${errBody}`);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : "Imeshindwa kuunganisha na seva";
+        console.error(`Chunk ${ci + 1}/${chunks.length} POST failed:`, reason);
+        failedTotal += chunk.length;
+        allFailures.push(...chunk.map(c => ({ name: c.name, phone: c.phone, reason })));
+        // Continue to the next chunk rather than aborting everything
+        continue;
       }
-    } catch (err) {
-      console.error("Bulk send failed to start:", err);
-      const reason = err instanceof Error ? err.message : "Imeshindwa kuunganisha na seva";
-      setSendingProgress(prev =>
-        prev
-          ? {
-              ...prev,
-              done: true,
-              failures: contactsWithImages.map(c => ({
-                name: c.name,
-                phone: c.phone,
-                reason,
-              })),
+
+      // Poll this chunk until it reports done
+      await new Promise<void>((resolve) => {
+        const chunkInterval = setInterval(async () => {
+          if (cancelRef.current) {
+            clearInterval(chunkInterval);
+            resolve();
+            return;
+          }
+          try {
+            const res = await fetch(`${BACKEND_URL}/progress/${chunkSessionId}`, {
+              headers: { 'x-api-key': process.env.NEXT_PUBLIC_WHATSAPP_API_KEY || '' },
+              signal: AbortSignal.timeout(5000),
+            });
+            if (!res.ok) return;
+            const json: ProgressPayload = await res.json();
+
+            setSendingProgress({
+              sent: successTotal + failedTotal + (json.sent ?? 0),
+              total: contactsWithImages.length,
+              current: json.current || "",
+              success: successTotal + (json.success ?? 0),
+              failed: failedTotal + (json.failed ?? 0),
+              done: false,
+              failures: [...allFailures, ...(json.failures ?? json.errors ?? [])],
+            });
+
+            if (json.done) {
+              clearInterval(chunkInterval);
+              successTotal += json.success ?? 0;
+              failedTotal += json.failed ?? 0;
+              allFailures.push(...(json.failures ?? json.errors ?? []));
+              resolve();
             }
-          : null
-      );
-      setIsSending(false);
-      return;
+          } catch {
+            // ignore transient poll errors
+          }
+        }, 2000);
+
+        pollIntervalRef.current = chunkInterval;
+      });
     }
 
-    // Start polling for progress
-    pollIntervalRef.current = setInterval(() => pollProgress(sessionId), 2000);
+    // All chunks finished (or cancelled)
+    setIsSending(false);
+    setSendingProgress({
+      sent: successTotal + failedTotal,
+      total: contactsWithImages.length,
+      current: "",
+      success: successTotal,
+      failed: failedTotal,
+      done: true,
+      failures: allFailures,
+    });
+
+    if (!cancelRef.current) {
+      fireNotification(
+        failedTotal === 0
+          ? (language === 'en' ? 'All messages sent ✓' : 'Ujumbe wote umetumwa ✓')
+          : (language === 'en' ? 'Sending complete ⚠️' : 'Kutuma kumekamilika ⚠️'),
+        language === 'en'
+          ? `${successTotal} sent successfully${failedTotal > 0 ? `, ${failedTotal} failed` : ''}.`
+          : `${successTotal} zimetumwa${failedTotal > 0 ? `, ${failedTotal} zimeshindwa` : ''}.`
+      );
+    }
   };
 
   useEffect(() => () => stopPolling(), []);
