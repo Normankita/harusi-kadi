@@ -77,7 +77,7 @@ async function fetchBatchDetail(id: string): Promise<BatchDetail> {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
-  return data.batch;
+  return data; // backend returns the batch object directly, no wrapper
 }
 
 async function updateBatchMessage(id: string, message: string) {
@@ -523,7 +523,7 @@ export default function SmsDashboardPage() {
           <div className="bg-ui-card rounded-2xl border border-ui-border shadow-2xl w-full max-w-2xl my-8">
 
             {/* Modal header */}
-            <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-amber-600 to-amber-500 rounded-t-2xl">
+            <div className="flex items-center justify-between px-5 py-4 bg-linear-to-r from-amber-600 to-amber-500 rounded-t-2xl">
               <div>
                 <h2 className="text-sm font-bold text-white">
                   {sw ? 'Maelezo ya SMS' : 'SMS Batch Detail'}
@@ -629,7 +629,7 @@ export default function SmsDashboardPage() {
 
                 {/* ── Recipients table ── */}
                 <div className="overflow-x-auto rounded-xl border border-ui-border">
-                  <table className="w-full text-xs min-w-[480px]">
+                  <table className="w-full text-xs min-w-120">
                     <thead className="bg-ui-bg border-b border-ui-border">
                       <tr>
                         <th className="px-3 py-2.5 w-8 text-left">
@@ -689,7 +689,7 @@ export default function SmsDashboardPage() {
                               }
                             </span>
                             {r.reason && (
-                              <p className="text-[10px] text-red-600 mt-0.5 max-w-[140px] truncate" title={r.reason}>
+                              <p className="text-[10px] text-red-600 mt-0.5 max-w-35 truncate" title={r.reason}>
                                 {r.reason}
                               </p>
                             )}
